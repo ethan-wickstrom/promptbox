@@ -1,4 +1,5 @@
 import console from "node:console"
+import { Cause, Effect, Exit, Option } from "effect"
 import { match } from "ts-pattern"
 import { createPromptStore } from "./prompts.ts"
 
@@ -23,49 +24,75 @@ const handleList = (): void => {
 
 const handleView = async (): Promise<void> => {
   const id = await ask("Prompt id: ")
-  const result = getPrompt(id)
-  result.match(
-    (prompt) => {
+  const exit = Effect.runSyncExit(getPrompt(id))
+  Exit.match(exit, {
+    onSuccess: (prompt): void => {
       console.log(`Name: ${prompt.name}\nContent: ${prompt.content}`)
     },
-    (error) => console.log(`Error: ${error.type}`)
-  )
+    onFailure: (cause): void => {
+      const option = Cause.failureOption(cause)
+      if (Option.isSome(option)) {
+        console.log(`Error: ${option.value.type}`)
+      } else {
+        console.log("Error")
+      }
+    }
+  })
 }
 
 const handleAdd = async (): Promise<void> => {
   const name = await ask("Name: ")
   const content = await ask("Content: ")
-  const result = addPrompt(name, content)
-  result.match(
-    (prompt) => console.log(`Added prompt ${prompt.id}`),
-    (err) =>
-      match(err)
-        .with({ type: "invalid-input" }, (e) => console.log(`Error: ${e.reason}`))
-        .otherwise((e) => console.log(`Error: ${e.type}`))
-  )
+  const exit = Effect.runSyncExit(addPrompt(name, content))
+  Exit.match(exit, {
+    onSuccess: (prompt): void => console.log(`Added prompt ${prompt.id}`),
+    onFailure: (cause): void => {
+      const option = Cause.failureOption(cause)
+      if (Option.isSome(option)) {
+        match(option.value)
+          .with({ type: "invalid-input" }, (e) => console.log(`Error: ${e.reason}`))
+          .otherwise((e) => console.log(`Error: ${e.type}`))
+      } else {
+        console.log("Error")
+      }
+    }
+  })
 }
 
 const handleUpdate = async (): Promise<void> => {
   const id = await ask("Id: ")
   const name = await ask("Name: ")
   const content = await ask("Content: ")
-  const result = updatePrompt(id, name, content)
-  result.match(
-    (prompt) => console.log(`Updated ${prompt.id}`),
-    (err) =>
-      match(err)
-        .with({ type: "invalid-input" }, (e) => console.log(`Error: ${e.reason}`))
-        .otherwise((e) => console.log(`Error: ${e.type}`))
-  )
+  const exit = Effect.runSyncExit(updatePrompt(id, name, content))
+  Exit.match(exit, {
+    onSuccess: (prompt): void => console.log(`Updated ${prompt.id}`),
+    onFailure: (cause): void => {
+      const option = Cause.failureOption(cause)
+      if (Option.isSome(option)) {
+        match(option.value)
+          .with({ type: "invalid-input" }, (e) => console.log(`Error: ${e.reason}`))
+          .otherwise((e) => console.log(`Error: ${e.type}`))
+      } else {
+        console.log("Error")
+      }
+    }
+  })
 }
 
 const handleDelete = async (): Promise<void> => {
   const id = await ask("Id: ")
-  const result = deletePrompt(id)
-  result.match(
-    () => console.log("Deleted"),
-    (err) => console.log(`Error: ${err.type}`)
-  )
+  const exit = Effect.runSyncExit(deletePrompt(id))
+  Exit.match(exit, {
+    onSuccess: (): void => console.log("Deleted"),
+    onFailure: (cause): void => {
+      const option = Cause.failureOption(cause)
+      if (Option.isSome(option)) {
+        console.log(`Error: ${option.value.type}`)
+      } else {
+        console.log("Error")
+      }
+    }
+  })
 }
 
 const main = async (): Promise<void> => {

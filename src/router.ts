@@ -1,5 +1,4 @@
-import type { Result } from "neverthrow"
-import { err, ok } from "neverthrow"
+import { Cause, Effect, Exit, Either, pipe } from "effect"
 import { P, match } from "ts-pattern"
 
 import type { PromptError } from "./errors.ts"
@@ -26,51 +25,78 @@ export type PromptInput = {
   readonly content: string
 }
 
-export const parseJson = async (req: Request): Promise<Result<JsonValue, Response>> => {
-  try {
-    const data = JSON.parse(await req.text())
-    return isJsonValue(data) ? ok(data) : err(new Response("Invalid JSON", { status: 400 }))
-  } catch {
-    return err(new Response("Invalid JSON", { status: 400 }))
-  }
-}
+export const parseJson = (req: Request): Effect.Effect<JsonValue, Response> =>
+  pipe(
+    Effect.tryPromise({
+      try: (): Promise<string> => req.text(),
+      catch: (): Response => new Response("Invalid JSON", { status: 400 })
+    }),
+    Effect.flatMap((text) =>
+      Effect.try({
+        try: (): JsonValue => JSON.parse(text),
+        catch: (): Response => new Response("Invalid JSON", { status: 400 })
+      })
+    ),
+    Effect.flatMap((data) =>
+      isJsonValue(data) ? Effect.succeed(data) : Effect.fail(new Response("Invalid JSON", { status: 400 }))
+    )
+  )
 
-export const validatePromptInput = (data: JsonObject): Result<PromptInput, Response> =>
+export const validatePromptInput = (data: JsonObject): Effect.Effect<PromptInput, Response> =>
   match(data)
-    .with({ name: P.string, content: P.string }, ({ name, content }) => ok({ name, content }))
-    .otherwise(() => err(new Response("Invalid", { status: 400 })))
+    .with({ name: P.string, content: P.string }, ({ name, content }) => Effect.succeed({ name, content }))
+    .otherwise(() => Effect.fail(new Response("Invalid", { status: 400 })))
 
-export const toResponse = <T>(result: Result<T, PromptError>, status = 200): Response =>
-  result.match(
-    (value) => Response.json(value, { status }),
-    (error) =>
-      match(error)
-        .with({ type: "invalid-input" }, (e) => new Response(e.reason, { status: 400 }))
-        .with({ type: "not-found" }, () => new Response("Not Found", { status: 404 }))
-        .exhaustive()
-  )
-
-export const toEmptyResponse = (result: Result<unknown, PromptError>, status = 204): Response =>
-  result.match(
-    () => new Response(null, { status }),
-    (error) =>
-      match(error)
-        .with({ type: "invalid-input" }, (e) => new Response(e.reason, { status: 400 }))
-        .with({ type: "not-found" }, () => new Response("Not Found", { status: 404 }))
-        .exhaustive()
-  )
-
-const parseAndValidate = async <B>(req: Request, validate: Validator<B>): Promise<Result<B, Response>> => {
-  const json = await parseJson(req)
-  if (json.isErr()) {
-    return err(json.error)
-  }
-  const parsedData = json.value
-  if (typeof parsedData !== "object" || parsedData === null || Array.isArray(parsedData)) {
-    return err(new Response("Invalid JSON", { status: 400 }))
-  }
-  return validate(parsedData)
+export const toResponse = <T>(effect: Effect.Effect<T, PromptError>, status = 200): Response => {
+  const exit = Effect.runSyncExit(effect)
+  return Exit.match(exit, {
+    onSuccess: (value): Response => Response.json(value, { status }),
+    onFailure: (cause): Response => {
+      const either = Cause.failureOrCause(cause)
+      if (Either.isLeft(either)) {
+        const error = either.left
+        if (error.type === "invalid-input") {
+          return new Response(error.reason, { status: 400 })
+        }
+        if (error.type === "not-found") {
+          return new Response("Not Found", { status: 404 })
+        }
+      }
+      return new Response("Internal Error", { status: 500 })
+    }
+  })
 }
+
+export const toEmptyResponse = (effect: Effect.Effect<unknown, PromptError>, status = 204): Response => {
+  const exit = Effect.runSyncExit(effect)
+  return Exit.match(exit, {
+    onSuccess: (): Response => new Response(null, { status }),
+    onFailure: (cause): Response => {
+      const either = Cause.failureOrCause(cause)
+      if (Either.isLeft(either)) {
+        const error = either.left
+        if (error.type === "invalid-input") {
+          return new Response(error.reason, { status: 400 })
+        }
+        if (error.type === "not-found") {
+          return new Response("Not Found", { status: 404 })
+        }
+      }
+      return new Response("Internal Error", { status: 500 })
+    }
+  })
+}
+
+const parseAndValidate = <B>(req: Request, validate: Validator<B>): Effect.Effect<B, Response> =>
+  pipe(
+    parseJson(req),
+    Effect.flatMap((parsedData) => {
+      if (typeof parsedData !== "object" || parsedData === null || Array.isArray(parsedData)) {
+        return Effect.fail(new Response("Invalid JSON", { status: 400 }))
+      }
+      return validate(parsedData)
+    })
+  )
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
 
@@ -85,7 +111,7 @@ type PathParams<P extends string> = P extends `${string}:${infer Param}/${infer 
     ? { [K in Param]: string }
     : Record<never, never>
 
-type Validator<T> = (data: JsonObject) => Result<T, Response>
+type Validator<T> = (data: JsonObject) => Effect.Effect<T, Response>
 
 export type QueryParams = {
   readonly limit?: string | readonly string[]
@@ -251,6 +277,7 @@ export class Router {
     return this.add("DELETE", path, handler)
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: router logic is straightforward
   private async dispatch(req: Request): Promise<Response> {
     const url = new URL(req.url)
     let methodMismatch = false
@@ -265,11 +292,17 @@ export class Router {
         continue
       }
       const query = parseQuery(url)
-      const bodyResult = route.validate ? await parseAndValidate(req, route.validate) : ok<unknown, Response>(undefined)
-      if (bodyResult.isErr()) {
-        return bodyResult.error
-      }
-      return route.handler({ req, params, query, body: bodyResult.value })
+        const bodyExit = route.validate
+          ? await Effect.runPromiseExit(parseAndValidate(req, route.validate))
+          : Exit.succeed<unknown>(undefined)
+        if (Exit.isFailure(bodyExit)) {
+          const either = Cause.failureOrCause(bodyExit.cause)
+          if (Either.isLeft(either)) {
+            return either.left
+          }
+          return new Response("Internal Error", { status: 500 })
+        }
+      return route.handler({ req, params, query, body: bodyExit.value })
     }
     if (methodMismatch) {
       return new Response("Method Not Allowed", { status: 405 })

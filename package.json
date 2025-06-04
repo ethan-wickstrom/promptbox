@@ -23,7 +23,6 @@
     "@effect/platform-bun": "^0.69.2",
     "@effect/schema": "^0.75.5",
     "effect": "^3.16.3",
-    "neverthrow": "^8.2.0",
     "ts-pattern": "^5.7.1"
   },
   "trustedDependencies": ["@biomejs/biome", "@parcel/watcher"]

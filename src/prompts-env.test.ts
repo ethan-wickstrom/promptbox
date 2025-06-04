@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { existsSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import process from "node:process"
+import { Effect } from "effect"
 import { createPromptStore } from "./prompts.ts"
 
 const CUSTOM_DIR = join(process.cwd(), "custom-data")
@@ -25,7 +26,7 @@ afterEach(() => {
 describe("PROMPTBOX_DATA_DIR", () => {
   it("stores database in the configured directory", () => {
     const { addPrompt, closeDb } = createPromptStore(CUSTOM_DIR)
-    addPrompt("env-test", "content")
+    Effect.runSync(addPrompt("env-test", "content"))
     closeDb()
     expect(existsSync(DB_PATH)).toBe(true)
   })

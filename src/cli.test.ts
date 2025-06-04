@@ -4,6 +4,7 @@ import { existsSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import process from "node:process"
 import { PassThrough } from "node:stream"
+import { Effect } from "effect"
 import { ask } from "./input.ts"
 import { TuiMenu } from "./menu.ts"
 import { createPromptStore } from "./prompts.ts"
@@ -53,7 +54,7 @@ describe("cli tui", () => {
     const contentPromise = ask("Content: ", { input, output })
     input.write("body\n")
     const content = await contentPromise
-    addPrompt(name, content)
+    Effect.runSync(addPrompt(name, content))
 
     const prompts = listPrompts()
     if (prompts.length === 0) {
