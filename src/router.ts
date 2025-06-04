@@ -198,10 +198,14 @@ export class Router {
 
   private async dispatch(req: Request): Promise<Response> {
     const url = new URL(req.url);
+    let methodMismatch = false;
     for (const route of this.routes) {
-      if (route.method !== req.method) continue;
       const params = route.match(url);
       if (!params) continue;
+      if (route.method !== req.method) {
+        methodMismatch = true;
+        continue;
+      }
       let body: unknown = undefined;
       if (route.validate) {
         const json = await parseJson(req);
@@ -214,6 +218,9 @@ export class Router {
         body = validated.value;
       }
       return route.handler({ req, params, body } as never);
+    }
+    if (methodMismatch) {
+      return new Response('Method Not Allowed', { status: 405 });
     }
     return new Response('Not Found', { status: 404 });
   }

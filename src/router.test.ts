@@ -88,4 +88,10 @@ describe('Router', () => {
     expect(goodData.name).toBe('n');
     expect(goodData.content).toBe('c');
   });
+
+  it('returns 405 for wrong method', async () => {
+    const router = new Router().get('/path', () => new Response('ok'));
+    const res = await router.handle(new Request('http://t/path', { method: 'POST' }));
+    expect(res.status).toBe(405);
+  });
 });

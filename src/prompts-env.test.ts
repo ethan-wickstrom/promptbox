@@ -6,14 +6,14 @@ const CUSTOM_DIR = join(process.cwd(), 'custom-data');
 const DB_PATH = join(CUSTOM_DIR, 'prompts.sqlite');
 
 beforeEach(() => {
-  process.env.PROMPTBOX_DATA_DIR = CUSTOM_DIR;
+  process.env['PROMPTBOX_DATA_DIR'] = CUSTOM_DIR;
   if (existsSync(DB_PATH)) {
     rmSync(DB_PATH);
   }
 });
 
 afterEach(() => {
-  delete process.env.PROMPTBOX_DATA_DIR;
+  delete process.env['PROMPTBOX_DATA_DIR'];
   if (existsSync(DB_PATH)) {
     rmSync(DB_PATH);
   }

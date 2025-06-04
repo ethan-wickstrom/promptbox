@@ -6,13 +6,11 @@ import {
   listPrompts,
   updatePrompt,
 } from './prompts';
-import { match } from 'ts-pattern';
 import {
   Router,
   toResponse,
   toEmptyResponse,
   validatePromptInput,
-  type PromptInput,
 } from './router';
 
 const buildHtml = (body: string): string => `<!DOCTYPE html>
@@ -28,7 +26,7 @@ const buildHtml = (body: string): string => `<!DOCTYPE html>
 
 export const createServer = () => {
   const router = new Router()
-    .use(async (req, next) => {
+    .use(async (_req, next) => {
       const res = await next();
       res.headers.set('X-Powered-By', 'Promptbox');
       return res;

@@ -5,9 +5,8 @@ import { err, ok, Result } from 'neverthrow';
 import type { Prompt } from './types';
 import type { PromptError } from './errors';
 
-const DATA_DIR = process.env.PROMPTBOX_DATA_DIR?.trim()
-  ? process.env.PROMPTBOX_DATA_DIR.trim()
-  : join(process.cwd(), 'data');
+const envDir = process.env['PROMPTBOX_DATA_DIR'];
+const DATA_DIR = envDir?.trim() ? envDir.trim() : join(process.cwd(), 'data');
 const DB_FILE = join(DATA_DIR, 'prompts.sqlite');
 let db: Database | undefined;
 
