@@ -89,6 +89,12 @@ describe('Router', () => {
     expect(goodData.content).toBe('c');
   });
 
+  it('returns 405 for wrong method', async () => {
+    const router = new Router().get('/path', () => new Response('ok'));
+    const res = await router.handle(new Request('http://t/path', { method: 'POST' }));
+    expect(res.status).toBe(405);
+  });
+     
   it('parses query parameters', async () => {
     const router = new Router().get('/query', ({ query }) => Response.json(query));
     const res = await router.handle(new Request('http://t/query?a=1&a=2&b=3'));
