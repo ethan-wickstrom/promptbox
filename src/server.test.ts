@@ -1,14 +1,27 @@
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { createServer } from './server';
+import { existsSync, rmSync } from 'fs';
+import { closeDb } from './prompts';
+import { join } from 'path';
+
+const DB_FILE = join(process.cwd(), 'data', 'prompts.sqlite');
 
 let server: ReturnType<typeof createServer>;
 
 beforeAll(() => {
+  closeDb();
+  if (existsSync(DB_FILE)) {
+    rmSync(DB_FILE);
+  }
   server = createServer();
 });
 
 afterAll(async () => {
   await server.stop(true);
+  closeDb();
+  if (existsSync(DB_FILE)) {
+    rmSync(DB_FILE);
+  }
 });
 
 describe('server api', () => {

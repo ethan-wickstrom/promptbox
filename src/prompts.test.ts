@@ -5,22 +5,25 @@ import {
   getPrompt,
   listPrompts,
   updatePrompt,
+  closeDb,
 } from './prompts';
 import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
 
 const DATA_DIR = join(process.cwd(), 'data');
-const PROMPTS_FILE = join(DATA_DIR, 'prompts.json');
+const DB_FILE = join(DATA_DIR, 'prompts.sqlite');
 
 beforeEach(() => {
-  if (existsSync(PROMPTS_FILE)) {
-    rmSync(PROMPTS_FILE);
+  closeDb();
+  if (existsSync(DB_FILE)) {
+    rmSync(DB_FILE);
   }
 });
 
 afterEach(() => {
-  if (existsSync(PROMPTS_FILE)) {
-    rmSync(PROMPTS_FILE);
+  closeDb();
+  if (existsSync(DB_FILE)) {
+    rmSync(DB_FILE);
   }
 });
 

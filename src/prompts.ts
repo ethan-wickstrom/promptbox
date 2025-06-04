@@ -1,36 +1,34 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { Database } from 'bun:sqlite';
 import { err, ok, Result } from 'neverthrow';
 import type { Prompt } from './types';
 import type { PromptError } from './errors';
 
 const DATA_DIR = join(process.cwd(), 'data');
-const PROMPTS_FILE = join(DATA_DIR, 'prompts.json');
+const DB_FILE = join(DATA_DIR, 'prompts.sqlite');
+let db: Database | undefined;
 
-const ensureDataDir = (): void => {
+const getDb = (): Database => {
+  if (db) {
+    return db;
+  }
   if (!existsSync(DATA_DIR)) {
     mkdirSync(DATA_DIR, { recursive: true });
   }
-  if (!existsSync(PROMPTS_FILE)) {
-    writeFileSync(PROMPTS_FILE, '[]');
-  }
+  db = new Database(DB_FILE);
+  db.exec('PRAGMA journal_mode = WAL;');
+  db.exec(
+    'CREATE TABLE IF NOT EXISTS prompts (id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL);',
+  );
+  return db;
 };
 
-const loadPrompts = (): ReadonlyArray<Prompt> => {
-  ensureDataDir();
-  const content = readFileSync(PROMPTS_FILE, 'utf8');
-  try {
-    const prompts = JSON.parse(content) as Prompt[];
-    return prompts;
-  } catch {
-    return [];
+export const closeDb = (): void => {
+  if (db) {
+    db.close(false);
+    db = undefined;
   }
-};
-
-const savePrompts = (prompts: ReadonlyArray<Prompt>): void => {
-  ensureDataDir();
-  const data = JSON.stringify(prompts, null, 2);
-  writeFileSync(PROMPTS_FILE, data);
 };
 
 export const addPrompt = (
@@ -40,21 +38,29 @@ export const addPrompt = (
   if (!name.trim() || !content.trim()) {
     return err({ type: 'invalid-input', reason: 'Empty values are not allowed' });
   }
-  const prompts = [...loadPrompts()];
   const id = Date.now().toString(36);
+  const db = getDb();
+  db
+    .query('INSERT INTO prompts (id, name, content) VALUES (?1, ?2, ?3)')
+    .run(id, name, content);
   const prompt: Prompt = { id, name, content };
-  prompts.push(prompt);
-  savePrompts(prompts);
   return ok(prompt);
 };
 
 export const getPrompt = (id: string): Result<Prompt, PromptError> => {
-  const prompts = loadPrompts();
-  const found = prompts.find(p => p.id === id);
-  return found ? ok(found) : err({ type: 'not-found', id });
+  const row =
+    getDb()
+      .query<Prompt, { $id: string }>(
+        'SELECT id, name, content FROM prompts WHERE id = $id',
+      )
+      .get({ $id: id }) ?? undefined;
+  return row ? ok(row) : err({ type: 'not-found', id });
 };
 
-export const listPrompts = (): ReadonlyArray<Prompt> => loadPrompts();
+export const listPrompts = (): ReadonlyArray<Prompt> =>
+  getDb()
+    .query<Prompt, []>('SELECT id, name, content FROM prompts')
+    .all();
 
 export const updatePrompt = (
   id: string,
@@ -64,23 +70,21 @@ export const updatePrompt = (
   if (!name.trim() || !content.trim()) {
     return err({ type: 'invalid-input', reason: 'Empty values are not allowed' });
   }
-  const prompts = [...loadPrompts()];
-  const index = prompts.findIndex(p => p.id === id);
-  if (index === -1) {
+  const result =
+    getDb()
+      .query('UPDATE prompts SET name = ?1, content = ?2 WHERE id = ?3')
+      .run(name, content, id);
+  if (result.changes === 0) {
     return err({ type: 'not-found', id });
   }
   const updated: Prompt = { id, name, content };
-  prompts[index] = updated;
-  savePrompts(prompts);
   return ok(updated);
 };
 
 export const deletePrompt = (id: string): Result<void, PromptError> => {
-  const prompts = [...loadPrompts()];
-  const filtered = prompts.filter(p => p.id !== id);
-  if (filtered.length === prompts.length) {
+  const result = getDb().query('DELETE FROM prompts WHERE id = ?1').run(id);
+  if (result.changes === 0) {
     return err({ type: 'not-found', id });
   }
-  savePrompts(filtered);
   return ok(undefined);
 };
