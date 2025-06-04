@@ -28,6 +28,11 @@ const buildHtml = (body: string): string => `<!DOCTYPE html>
 
 export const createServer = () => {
   const router = new Router()
+    .use(async (req, next) => {
+      const res = await next();
+      res.headers.set('X-Powered-By', 'Promptbox');
+      return res;
+    })
     .get('/api/prompts', () => Response.json(listPrompts()))
     .post('/api/prompts', validatePromptInput, ({ body }) =>
       toResponse(addPrompt(body.name, body.content), 201),

@@ -10,7 +10,7 @@ import {
 import type { PromptError } from './errors';
 
 const readJson = async (body: string) =>
-  parseJson<Record<string, unknown>>(new Request('http://t', { method: 'POST', body }));
+  parseJson(new Request('http://t', { method: 'POST', body }));
 
 describe('router utilities', () => {
   it('parses valid json', async () => {
@@ -55,6 +55,26 @@ describe('Router', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.id).toBe('abc');
+  });
+
+  it('runs middleware chain', async () => {
+    const calls: string[] = [];
+    const router = new Router()
+      .use(async (_req, next) => {
+        calls.push('a');
+        return next();
+      })
+      .use(async (_req, next) => {
+        calls.push('b');
+        const res = await next();
+        res.headers.set('x-test', calls.join(''));
+        return res;
+      })
+      .get('/mw', () => new Response('ok'));
+
+    const res = await router.handle(new Request('http://t/mw'));
+    expect(await res.text()).toBe('ok');
+    expect(res.headers.get('x-test')).toBe('ab');
   });
 
   it('validates request bodies', async () => {

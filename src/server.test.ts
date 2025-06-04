@@ -97,6 +97,11 @@ describe('server api', () => {
     expect(getRes.status).toBe(404);
   });
 
+  it('adds middleware headers', async () => {
+    const res = await fetch(new URL('/api/prompts', server.url));
+    expect(res.headers.get('x-powered-by')).toBe('Promptbox');
+  });
+
   it('rejects invalid json', async () => {
     const res = await fetch(new URL('/api/prompts', server.url), {
       method: 'POST',
