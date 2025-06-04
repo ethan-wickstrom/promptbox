@@ -1,5 +1,30 @@
 import { match, P } from 'ts-pattern';
 import { Result, ok, err } from 'neverthrow';
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export type JsonObject = { readonly [key: string]: JsonValue };
+
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (typeof value === 'object' && value !== null)
+    return Object.values(value as JsonObject).every(isJsonValue);
+  return false;
+};
 import type { PromptError } from './errors';
 
 export type PromptInput = {
@@ -7,17 +32,21 @@ export type PromptInput = {
   readonly content: string;
 };
 
-export const parseJson = async <T>(req: Request): Promise<Result<T, Response>> => {
+export const parseJson = async (
+  req: Request,
+): Promise<Result<JsonValue, Response>> => {
   try {
-    const data = (await req.json()) as T;
-    return ok(data);
+    const data = JSON.parse(await req.text());
+    return isJsonValue(data)
+      ? ok(data)
+      : err(new Response('Invalid JSON', { status: 400 }));
   } catch {
     return err(new Response('Invalid JSON', { status: 400 }));
   }
 };
 
 export const validatePromptInput = (
-  data: Record<string, unknown>,
+  data: JsonObject,
 ): Result<PromptInput, Response> =>
   match(data)
     .with({ name: P.string, content: P.string }, ({ name, content }) =>
@@ -60,7 +89,7 @@ type PathParams<P extends string> =
     ? { [K in Param]: string }
     : {};
 
-type Validator<T> = (data: Record<string, unknown>) => Result<T, Response>;
+type Validator<T> = (data: JsonObject) => Result<T, Response>;
 
 type Route<P extends string, B> = {
   readonly method: HttpMethod;
@@ -90,11 +119,27 @@ const buildMatcher = <P extends string>(path: P) => {
   };
 };
 
+export type Middleware = (
+  req: Request,
+  next: () => Promise<Response>,
+) => Promise<Response>;
+
 export class Router {
-  constructor(private readonly routes: readonly Route<string, unknown>[] = []) {}
+  constructor(
+    private readonly routes: readonly Route<string, unknown>[] = [],
+    private readonly middleware: readonly Middleware[] = [],
+  ) {}
 
   private with(route: Route<string, unknown>): Router {
-    return new Router([...this.routes, route]);
+    return new Router([...this.routes, route], this.middleware);
+  }
+
+  private withMiddleware(mw: Middleware): Router {
+    return new Router(this.routes, [...this.middleware, mw]);
+  }
+
+  use(mw: Middleware): Router {
+    return this.withMiddleware(mw);
   }
 
   add<P extends string, B>(
@@ -151,7 +196,7 @@ export class Router {
     return this.add('DELETE', path, handler);
   }
 
-  async handle(req: Request): Promise<Response> {
+  private async dispatch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     for (const route of this.routes) {
       if (route.method !== req.method) continue;
@@ -159,8 +204,11 @@ export class Router {
       if (!params) continue;
       let body: unknown = undefined;
       if (route.validate) {
-        const json = await parseJson<Record<string, unknown>>(req);
+        const json = await parseJson(req);
         if (json.isErr()) return json.error;
+        if (typeof json.value !== 'object' || json.value === null || Array.isArray(json.value)) {
+          return new Response('Invalid JSON', { status: 400 });
+        }
         const validated = route.validate(json.value);
         if (validated.isErr()) return validated.error;
         body = validated.value;
@@ -168,6 +216,20 @@ export class Router {
       return route.handler({ req, params, body } as never);
     }
     return new Response('Not Found', { status: 404 });
+  }
+
+  async handle(req: Request): Promise<Response> {
+    let index = -1;
+    const run = async (i: number): Promise<Response> => {
+      if (i <= index) throw new Error('next called multiple times');
+      index = i;
+      const mw = this.middleware[i];
+      if (mw) {
+        return mw(req, () => run(i + 1));
+      }
+      return this.dispatch(req);
+    };
+    return run(0);
   }
 }
 
