@@ -281,12 +281,16 @@ export class Router {
 
   private async dispatch(req: Request): Promise<Response> {
     const url = new URL(req.url);
+    let methodMismatch = false;
 
     for (const route of this.routes) {
-      if (route.method !== req.method) continue;
       const params = route.match(url);
       if (!params) continue;
+      if (route.method !== req.method) {
+        methodMismatch = true;
 
+        continue;
+      }
       const query = parseQuery(url);
       let body: unknown;
       if (route.validate) {
@@ -309,7 +313,9 @@ export class Router {
 
       return route.handler({ req, params, query, body });
     }
-
+    if (methodMismatch) {
+      return new Response('Method Not Allowed', { status: 405 });
+    }
     return new Response('Not Found', { status: 404 });
   }
 
