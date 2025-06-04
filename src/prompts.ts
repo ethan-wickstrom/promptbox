@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { Database } from 'bun:sqlite';
-import { err, ok, Result } from 'neverthrow';
+import { err, ok, type Result } from 'neverthrow';
 import type { Prompt } from './types';
 import type { PromptError } from './errors';
 
@@ -43,7 +43,12 @@ export const addPrompt = (
       reason: 'Empty values are not allowed',
     });
   }
-  const id = Date.now().toString(36);
+  // Use a UUID to avoid collisions when multiple prompts are created within the same millisecond.
+  // Bun (and modern runtimes) expose `crypto.randomUUID()` globally, which returns a RFC-4122 v4 UUID.
+  // Fall back to timestamp if `crypto.randomUUID` is unavailable (unlikely, but keeps the code portable).
+  const id: string = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const db = getDb();
   db.query('INSERT INTO prompts (id, name, content) VALUES (?1, ?2, ?3)').run(
     id,
