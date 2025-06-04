@@ -8,7 +8,7 @@ import {
 } from './prompts';
 import { match } from 'ts-pattern';
 import {
-  parseJson,
+  Router,
   toResponse,
   toEmptyResponse,
   validatePromptInput,
@@ -26,8 +26,21 @@ const buildHtml = (body: string): string => `<!DOCTYPE html>
 <body class="p-4 font-sans">${body}</body>
 </html>`;
 
-export const createServer = () =>
-  Bun.serve({
+export const createServer = () => {
+  const router = new Router()
+    .get('/api/prompts', () => Response.json(listPrompts()))
+    .post('/api/prompts', validatePromptInput, ({ body }) =>
+      toResponse(addPrompt(body.name, body.content), 201),
+    )
+    .get('/api/prompts/:id', ({ params }) => toResponse(getPrompt(params.id)))
+    .put('/api/prompts/:id', validatePromptInput, ({ params, body }) =>
+      toResponse(updatePrompt(params.id, body.name, body.content)),
+    )
+    .delete('/api/prompts/:id', ({ params }) =>
+      toEmptyResponse(deletePrompt(params.id)),
+    );
+
+  return Bun.serve({
     development: true,
     routes: {
       '/': indexPage,
@@ -36,36 +49,17 @@ export const createServer = () =>
         return result.match(
           prompt => {
             const body = `<h1 class="text-2xl mb-4">${prompt.name}</h1><pre class="whitespace-pre-wrap">${prompt.content}</pre>`;
-            return new Response(buildHtml(body), { headers: { 'Content-Type': 'text/html' } });
+            return new Response(buildHtml(body), {
+              headers: { 'Content-Type': 'text/html' },
+            });
           },
           () => new Response('Not Found', { status: 404 }),
         );
       },
-      '/api/prompts': {
-        GET: () => Response.json(listPrompts()),
-        POST: async req => {
-          const raw = await parseJson<Record<string, unknown>>(req);
-          if (raw.isErr()) return raw.error;
-          const input = validatePromptInput(raw.value);
-          if (input.isErr()) return input.error;
-          return toResponse(addPrompt(input.value.name, input.value.content), 201);
-        },
-      },
-      '/api/prompts/:id': {
-        GET: req => toResponse(getPrompt(req.params.id)),
-        PUT: async req => {
-          const raw = await parseJson<Record<string, unknown>>(req);
-          if (raw.isErr()) return raw.error;
-          const input = validatePromptInput(raw.value);
-          if (input.isErr()) return input.error;
-          return toResponse(
-            updatePrompt(req.params.id, input.value.name, input.value.content),
-          );
-        },
-        DELETE: req => toEmptyResponse(deletePrompt(req.params.id)),
-      },
     },
+    fetch: req => router.handle(req),
   });
+};
 
 if (import.meta.main) {
   const server = createServer();
