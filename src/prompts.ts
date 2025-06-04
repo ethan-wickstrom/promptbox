@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { err, ok, Result } from 'neverthrow';
 import type { Prompt } from './types';
+import type { PromptError } from './errors';
 
 const DATA_DIR = join(process.cwd(), 'data');
 const PROMPTS_FILE = join(DATA_DIR, 'prompts.json');
@@ -31,18 +33,25 @@ const savePrompts = (prompts: ReadonlyArray<Prompt>): void => {
   writeFileSync(PROMPTS_FILE, data);
 };
 
-export const addPrompt = (name: string, content: string): Prompt => {
+export const addPrompt = (
+  name: string,
+  content: string,
+): Result<Prompt, PromptError> => {
+  if (!name.trim() || !content.trim()) {
+    return err({ type: 'invalid-input', reason: 'Empty values are not allowed' });
+  }
   const prompts = [...loadPrompts()];
   const id = Date.now().toString(36);
   const prompt: Prompt = { id, name, content };
   prompts.push(prompt);
   savePrompts(prompts);
-  return prompt;
+  return ok(prompt);
 };
 
-export const getPrompt = (id: string): Prompt | null => {
+export const getPrompt = (id: string): Result<Prompt, PromptError> => {
   const prompts = loadPrompts();
-  return prompts.find((p) => p.id === id) ?? null;
+  const found = prompts.find(p => p.id === id);
+  return found ? ok(found) : err({ type: 'not-found', id });
 };
 
 export const listPrompts = (): ReadonlyArray<Prompt> => loadPrompts();
@@ -51,24 +60,27 @@ export const updatePrompt = (
   id: string,
   name: string,
   content: string,
-): Prompt | null => {
+): Result<Prompt, PromptError> => {
+  if (!name.trim() || !content.trim()) {
+    return err({ type: 'invalid-input', reason: 'Empty values are not allowed' });
+  }
   const prompts = [...loadPrompts()];
-  const index = prompts.findIndex((p) => p.id === id);
+  const index = prompts.findIndex(p => p.id === id);
   if (index === -1) {
-    return null;
+    return err({ type: 'not-found', id });
   }
   const updated: Prompt = { id, name, content };
   prompts[index] = updated;
   savePrompts(prompts);
-  return updated;
+  return ok(updated);
 };
 
-export const deletePrompt = (id: string): boolean => {
+export const deletePrompt = (id: string): Result<void, PromptError> => {
   const prompts = [...loadPrompts()];
-  const filtered = prompts.filter((p) => p.id !== id);
+  const filtered = prompts.filter(p => p.id !== id);
   if (filtered.length === prompts.length) {
-    return false;
+    return err({ type: 'not-found', id });
   }
   savePrompts(filtered);
-  return true;
+  return ok(undefined);
 };

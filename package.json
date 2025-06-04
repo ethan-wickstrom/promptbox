@@ -15,5 +15,9 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "neverthrow": "^8.2.0",
+    "ts-pattern": "^5.7.1"
   }
 }
