@@ -91,11 +91,29 @@ type PathParams<P extends string> =
 
 type Validator<T> = (data: JsonObject) => Result<T, Response>;
 
+export type QueryParams = {
+  readonly [key: string]: string | readonly string[];
+};
+
+export const parseQuery = (url: URL): QueryParams => {
+  const result: Record<string, string | string[]> = {};
+  for (const key of new Set(url.searchParams.keys())) {
+    const values = url.searchParams.getAll(key);
+    result[key] = values.length === 1 ? values[0]! : values;
+  }
+  return result;
+};
+
 type Route<P extends string, B> = {
   readonly method: HttpMethod;
   readonly match: (url: URL) => PathParams<P> | null;
   readonly handler: (
-    ctx: { readonly req: Request; readonly params: PathParams<P>; readonly body: B },
+    ctx: {
+      readonly req: Request;
+      readonly params: PathParams<P>;
+      readonly query: QueryParams;
+      readonly body: B;
+    },
   ) => Promise<Response> | Response;
   readonly validate?: Validator<B>;
 };
@@ -146,7 +164,12 @@ export class Router {
     method: HttpMethod,
     path: P,
     handler: (
-      ctx: { readonly req: Request; readonly params: PathParams<P>; readonly body: B },
+      ctx: {
+        readonly req: Request;
+        readonly params: PathParams<P>;
+        readonly query: QueryParams;
+        readonly body: B;
+      },
     ) => Promise<Response> | Response,
     validate?: Validator<B>,
   ): Router {
@@ -161,7 +184,12 @@ export class Router {
   get<P extends string>(
     path: P,
     handler: (
-      ctx: { readonly req: Request; readonly params: PathParams<P>; readonly body: undefined },
+      ctx: {
+        readonly req: Request;
+        readonly params: PathParams<P>;
+        readonly query: QueryParams;
+        readonly body: undefined;
+      },
     ) => Promise<Response> | Response,
   ): Router {
     return this.add('GET', path, handler);
@@ -171,7 +199,12 @@ export class Router {
     path: P,
     validate: Validator<B>,
     handler: (
-      ctx: { readonly req: Request; readonly params: PathParams<P>; readonly body: B },
+      ctx: {
+        readonly req: Request;
+        readonly params: PathParams<P>;
+        readonly query: QueryParams;
+        readonly body: B;
+      },
     ) => Promise<Response> | Response,
   ): Router {
     return this.add('POST', path, handler, validate);
@@ -181,7 +214,12 @@ export class Router {
     path: P,
     validate: Validator<B>,
     handler: (
-      ctx: { readonly req: Request; readonly params: PathParams<P>; readonly body: B },
+      ctx: {
+        readonly req: Request;
+        readonly params: PathParams<P>;
+        readonly query: QueryParams;
+        readonly body: B;
+      },
     ) => Promise<Response> | Response,
   ): Router {
     return this.add('PUT', path, handler, validate);
@@ -190,7 +228,12 @@ export class Router {
   delete<P extends string>(
     path: P,
     handler: (
-      ctx: { readonly req: Request; readonly params: PathParams<P>; readonly body: undefined },
+      ctx: {
+        readonly req: Request;
+        readonly params: PathParams<P>;
+        readonly query: QueryParams;
+        readonly body: undefined;
+      },
     ) => Promise<Response> | Response,
   ): Router {
     return this.add('DELETE', path, handler);
@@ -202,6 +245,7 @@ export class Router {
       if (route.method !== req.method) continue;
       const params = route.match(url);
       if (!params) continue;
+      const query = parseQuery(url);
       let body: unknown = undefined;
       if (route.validate) {
         const json = await parseJson(req);
@@ -213,7 +257,7 @@ export class Router {
         if (validated.isErr()) return validated.error;
         body = validated.value;
       }
-      return route.handler({ req, params, body } as never);
+      return route.handler({ req, params, query, body } as never);
     }
     return new Response('Not Found', { status: 404 });
   }
