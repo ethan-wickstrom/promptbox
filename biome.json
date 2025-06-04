@@ -8,12 +8,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": [
-      "**/bun-docs/**",
-      "**/dist/**",
-      "**/node_modules/**",
-      "**/.effect/**"
-    ],
+    "ignore": ["**/bun-docs/**", "**/dist/**", "**/node_modules/**", "**/.effect/**"],
     "maxSize": 1048576
   },
   "formatter": {
