@@ -1247,7 +1247,8 @@ Adopt these opinionated guidelines for writing robust, maintainable, and type-sa
 
 Generate code, corrections, and refactorings that comply with the basic principles and nomenclature.
 
-- The CLI tool is a TUI tool
+## !!!IMPORTANT!!!
+
 - Add unit for each function and integration tests for each feature
 - Use abstract data types, sum types, variants, and invariants
 - Use ts-pattern
