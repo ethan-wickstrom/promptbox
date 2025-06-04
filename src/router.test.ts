@@ -94,4 +94,12 @@ describe('Router', () => {
     const res = await router.handle(new Request('http://t/path', { method: 'POST' }));
     expect(res.status).toBe(405);
   });
+     
+  it('parses query parameters', async () => {
+    const router = new Router().get('/query', ({ query }) => Response.json(query));
+    const res = await router.handle(new Request('http://t/query?a=1&a=2&b=3'));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({ a: ['1', '2'], b: '3' });
+  });
 });

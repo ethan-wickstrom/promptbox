@@ -31,7 +31,17 @@ export const createServer = () => {
       res.headers.set('X-Powered-By', 'Promptbox');
       return res;
     })
-    .get('/api/prompts', () => Response.json(listPrompts()))
+    .get('/api/prompts', ({ query }) => {
+      const limitRaw = query['limit'];
+      const prompts = listPrompts();
+      if (typeof limitRaw === 'string') {
+        const limit = parseInt(limitRaw, 10);
+        if (!Number.isNaN(limit) && limit >= 0) {
+          return Response.json(prompts.slice(0, limit));
+        }
+      }
+      return Response.json(prompts);
+    })
     .post('/api/prompts', validatePromptInput, ({ body }) =>
       toResponse(addPrompt(body.name, body.content), 201),
     )
