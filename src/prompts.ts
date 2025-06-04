@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { Database } from 'bun:sqlite';
 import { err, ok, type Result } from 'neverthrow';
+import {
+  createConnection,
+  type DbConnection,
+  type DbError,
+} from './db';
+import { createPromptRepo } from './prompt-repo';
 import type { Prompt } from './types';
 import type { PromptError } from './errors';
 
@@ -10,33 +15,51 @@ export const createPromptStore = (dataDir?: string) => {
     process.env['PROMPTBOX_DATA_DIR']?.trim() ||
     join(process.cwd(), 'data');
   const dbFile = join(dir, 'prompts.sqlite');
-  let db: Database | undefined;
+  let db: DbConnection | undefined;
+  let repo: ReturnType<typeof createPromptRepo> | undefined;
 
-  const getDb = (): Database => {
+  const getDb = (): Result<DbConnection, DbError> => {
     if (db) {
-      return db;
+      return ok(db);
     }
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    db = new Database(dbFile);
-    db.exec('PRAGMA journal_mode = WAL;');
-    db.exec(
-      'CREATE TABLE IF NOT EXISTS prompts (id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL);'
-    );
-    return db;
+    return createConnection(dbFile).map((conn) => {
+      db = conn;
+      conn.run(
+        'CREATE TABLE IF NOT EXISTS prompts (id TEXT PRIMARY KEY, name TEXT NOT NULL, content TEXT NOT NULL);',
+        [],
+      );
+      repo = createPromptRepo(conn);
+      return conn;
+    });
   };
 
   const closeDb = (): void => {
     if (db) {
-      db.close(false);
+      db.close();
       db = undefined;
+      repo = undefined;
     }
   };
 
+  const getRepo = (): Result<ReturnType<typeof createPromptRepo>, DbError> =>
+    getDb().map((conn) => {
+      if (!repo) {
+        repo = createPromptRepo(conn);
+      }
+      return repo;
+    });
+
+  const mapDbError = (error: DbError): PromptError => ({
+    type: 'invalid-input',
+    reason: error.reason,
+  });
+
   const addPrompt = (
     name: string,
-    content: string
+    content: string,
   ): Result<Prompt, PromptError> => {
     if (!name.trim() || !content.trim()) {
       return err({
@@ -47,26 +70,23 @@ export const createPromptStore = (dataDir?: string) => {
     const id: string = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const database = getDb();
-    database
-      .query('INSERT INTO prompts (id, name, content) VALUES (?1, ?2, ?3)')
-      .run(id, name, content);
-    const prompt: Prompt = { id, name, content };
-    return ok(prompt);
+    return getRepo()
+      .mapErr(mapDbError)
+      .andThen((r) => r.addPrompt(id, name, content));
   };
 
-  const getPrompt = (id: string): Result<Prompt, PromptError> => {
-    const row =
-      getDb()
-        .query<Prompt, { $id: string }>(
-          'SELECT id, name, content FROM prompts WHERE id = $id'
-        )
-        .get({ $id: id }) ?? undefined;
-    return row ? ok(row) : err({ type: 'not-found', id });
-  };
+  const getPrompt = (id: string): Result<Prompt, PromptError> =>
+    getRepo()
+      .mapErr(mapDbError)
+      .andThen((r) => r.getPrompt(id));
 
   const listPrompts = (): ReadonlyArray<Prompt> =>
-    getDb().query<Prompt, []>('SELECT id, name, content FROM prompts').all();
+    getRepo()
+      .andThen((r) => r.listPrompts())
+      .match(
+        (rows) => rows,
+        () => [],
+      );
 
   const updatePrompt = (
     id: string,
@@ -79,23 +99,15 @@ export const createPromptStore = (dataDir?: string) => {
         reason: 'Empty values are not allowed',
       });
     }
-    const result = getDb()
-      .query('UPDATE prompts SET name = ?1, content = ?2 WHERE id = ?3')
-      .run(name, content, id);
-    if (result.changes === 0) {
-      return err({ type: 'not-found', id });
-    }
-    const updated: Prompt = { id, name, content };
-    return ok(updated);
+    return getRepo()
+      .mapErr(mapDbError)
+      .andThen((r) => r.updatePrompt(id, name, content));
   };
 
-  const deletePrompt = (id: string): Result<void, PromptError> => {
-    const result = getDb().query('DELETE FROM prompts WHERE id = ?1').run(id);
-    if (result.changes === 0) {
-      return err({ type: 'not-found', id });
-    }
-    return ok(undefined);
-  };
+  const deletePrompt = (id: string): Result<void, PromptError> =>
+    getRepo()
+      .mapErr(mapDbError)
+      .andThen((r) => r.deletePrompt(id));
 
   return {
     addPrompt,
