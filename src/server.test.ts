@@ -36,4 +36,64 @@ describe('server api', () => {
     const prompts = await listRes.json();
     expect(prompts.length).toBe(1);
   });
+
+  it('retrieves a prompt by id', async () => {
+    const createRes = await fetch(new URL('/api/prompts', server.url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'get', content: 'test get' }),
+    });
+    const created = await createRes.json();
+    const getRes = await fetch(
+      new URL(`/api/prompts/${created.id}`, server.url),
+    );
+    expect(getRes.status).toBe(200);
+    const prompt = await getRes.json();
+    expect(prompt.name).toBe('get');
+    expect(prompt.content).toBe('test get');
+  });
+
+  it('updates a prompt', async () => {
+    const createRes = await fetch(new URL('/api/prompts', server.url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'old', content: 'content' }),
+    });
+    const created = await createRes.json();
+    const updateRes = await fetch(
+      new URL(`/api/prompts/${created.id}`, server.url),
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'new', content: 'updated' }),
+      },
+    );
+    expect(updateRes.status).toBe(200);
+    const updated = await updateRes.json();
+    expect(updated.name).toBe('new');
+    expect(updated.content).toBe('updated');
+  });
+
+  it('deletes a prompt', async () => {
+    const createRes = await fetch(new URL('/api/prompts', server.url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'temp', content: 'delete' }),
+    });
+    const created = await createRes.json();
+    const deleteRes = await fetch(
+      new URL(`/api/prompts/${created.id}`, server.url),
+      { method: 'DELETE' },
+    );
+    expect(deleteRes.status).toBe(204);
+    const listRes = await fetch(new URL('/api/prompts', server.url));
+    const prompts = await listRes.json();
+    expect(prompts.find((p: { id: string }) => p.id === created.id)).toBe(
+      undefined,
+    );
+    const getRes = await fetch(
+      new URL(`/api/prompts/${created.id}`, server.url),
+    );
+    expect(getRes.status).toBe(404);
+  });
 });
