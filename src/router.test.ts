@@ -88,4 +88,12 @@ describe('Router', () => {
     expect(goodData.name).toBe('n');
     expect(goodData.content).toBe('c');
   });
+
+  it('parses query parameters', async () => {
+    const router = new Router().get('/query', ({ query }) => Response.json(query));
+    const res = await router.handle(new Request('http://t/query?a=1&a=2&b=3'));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({ a: ['1', '2'], b: '3' });
+  });
 });
