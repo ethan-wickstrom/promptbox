@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern';
 import {
   addPrompt,
   deletePrompt,
@@ -5,83 +6,90 @@ import {
   listPrompts,
   updatePrompt,
 } from './prompts';
+import { TuiMenu, ask } from './tui';
 
-const showUsage = (): void => {
-  console.log('Usage:');
-  console.log('  bun run src/cli.ts add <name> <content>');
-  console.log('  bun run src/cli.ts list');
-  console.log('  bun run src/cli.ts view <id>');
-  console.log('  bun run src/cli.ts update <id> <name> <content>');
-  console.log('  bun run src/cli.ts delete <id>');
+const actions = [
+  'List prompts',
+  'View prompt',
+  'Add prompt',
+  'Update prompt',
+  'Delete prompt',
+  'Exit',
+] as const;
+
+type ActionIndex = 0 | 1 | 2 | 3 | 4 | 5;
+
+const handleList = (): void => {
+  const prompts = listPrompts();
+  if (prompts.length === 0) {
+    console.log('No prompts found');
+    return;
+  }
+  prompts.forEach(p => console.log(`${p.id}: ${p.name}`));
 };
 
-const main = (): void => {
-  const [command, ...args] = Bun.argv.slice(2);
-
-  switch (command) {
-    case 'add': {
-      const [name, content] = args;
-      if (!name || !content) {
-        showUsage();
-        return;
-      }
-      const prompt = addPrompt(name, content);
-      console.log(`Added prompt with id: ${prompt.id}`);
-      break;
-    }
-    case 'list': {
-      const prompts = listPrompts();
-      if (prompts.length === 0) {
-        console.log('No prompts found');
-        return;
-      }
-      prompts.forEach((p) => console.log(`${p.id}: ${p.name}`));
-      break;
-    }
-    case 'view': {
-      const [id] = args;
-      if (!id) {
-        showUsage();
-        return;
-      }
-      const prompt = getPrompt(id);
-      if (!prompt) {
-        console.log(`Prompt ${id} not found`);
-        return;
-      }
+const handleView = async (): Promise<void> => {
+  const id = await ask('Prompt id: ');
+  const result = getPrompt(id);
+  result.match(
+    prompt => {
       console.log(`Name: ${prompt.name}\nContent: ${prompt.content}`);
-      break;
-    }
-    case 'update': {
-      const [id, name, content] = args;
-      if (!id || !name || !content) {
-        showUsage();
-        return;
-      }
-      const updated = updatePrompt(id, name, content);
-      if (!updated) {
-        console.log(`Prompt ${id} not found`);
-        return;
-      }
-      console.log(`Updated prompt ${id}`);
-      break;
-    }
-    case 'delete': {
-      const [id] = args;
-      if (!id) {
-        showUsage();
-        return;
-      }
-      const deleted = deletePrompt(id);
-      if (!deleted) {
-        console.log(`Prompt ${id} not found`);
-        return;
-      }
-      console.log(`Deleted prompt ${id}`);
-      break;
-    }
-    default:
-      showUsage();
+    },
+    error => console.log(`Error: ${error.type}`),
+  );
+};
+
+const handleAdd = async (): Promise<void> => {
+  const name = await ask('Name: ');
+  const content = await ask('Content: ');
+  const result = addPrompt(name, content);
+  result.match(
+    prompt => console.log(`Added prompt ${prompt.id}`),
+    err =>
+      match(err)
+        .with({ type: 'invalid-input' }, e => console.log(`Error: ${e.reason}`))
+        .otherwise(e => console.log(`Error: ${e.type}`)),
+  );
+};
+
+const handleUpdate = async (): Promise<void> => {
+  const id = await ask('Id: ');
+  const name = await ask('Name: ');
+  const content = await ask('Content: ');
+  const result = updatePrompt(id, name, content);
+  result.match(
+    prompt => console.log(`Updated ${prompt.id}`),
+    err =>
+      match(err)
+        .with({ type: 'invalid-input' }, e => console.log(`Error: ${e.reason}`))
+        .otherwise(e => console.log(`Error: ${e.type}`)),
+  );
+};
+
+const handleDelete = async (): Promise<void> => {
+  const id = await ask('Id: ');
+  const result = deletePrompt(id);
+  result.match(
+    () => console.log('Deleted'),
+    err => console.log(`Error: ${err.type}`),
+  );
+};
+
+const main = async (): Promise<void> => {
+  let running = true;
+  while (running) {
+    const menu = new TuiMenu([...actions]);
+    const choice = (await menu.run()) as ActionIndex;
+    await match<ActionIndex>(choice)
+      .with(0, () => handleList())
+      .with(1, () => handleView())
+      .with(2, () => handleAdd())
+      .with(3, () => handleUpdate())
+      .with(4, () => handleDelete())
+      .with(5, () => {
+        running = false;
+      })
+      .exhaustive();
   }
 };
 
