@@ -1,0 +1,23 @@
+{
+  "name": "promptbox",
+  "module": "src/cli.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "cli": "bun run src/cli.ts",
+    "dev": "bun run src/server.ts",
+    "test": "bun test",
+    "typecheck": "bun run tsc -p ."
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.15.29"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "neverthrow": "^8.2.0",
+    "ts-pattern": "^5.7.1"
+  }
+}

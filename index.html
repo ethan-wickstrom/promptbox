@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Promptbox</title>
+</head>
+<body class="p-4 font-sans">
+  <h1 class="text-2xl mb-4">Prompts</h1>
+  <form id="add" class="mb-4 space-y-2">
+    <input class="border p-1 w-full" placeholder="Name" id="name" />
+    <textarea class="border p-1 w-full" placeholder="Content" id="content"></textarea>
+    <button class="bg-blue-600 text-white px-2 py-1" type="submit">Add</button>
+  </form>
+  <ul id="list" class="space-y-1"></ul>
+  <script type="module">
+    const list = document.getElementById('list');
+    const form = document.getElementById('add');
+
+    async function load() {
+      const res = await fetch('/api/prompts');
+      const prompts = await res.json();
+      list.innerHTML = prompts
+        .map(
+          p => `<li class="flex justify-between"><a class="text-blue-600" href="/prompt/${p.id}">${p.name}</a><button data-id="${p.id}" class="text-red-600 delete">Delete</button></li>`,
+        )
+        .join('');
+    }
+
+    list.addEventListener('click', async e => {
+      const target = e.target;
+      if (target instanceof HTMLElement && target.classList.contains('delete')) {
+        const id = target.dataset.id;
+        if (!id) return;
+        await fetch('/api/prompts/' + id, { method: 'DELETE' });
+        load();
+      }
+    });
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = document.getElementById('name').value;
+      const content = document.getElementById('content').value;
+      await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, content }),
+      });
+      (document.getElementById('name').value = ''),
+        (document.getElementById('content').value = '');
+      load();
+    });
+
+    load();
+  </script>
+</body>
+</html>
