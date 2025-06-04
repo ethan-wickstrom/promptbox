@@ -45,7 +45,7 @@ You are an expert TypeScript developer specializing in Bun runtime and Effect fr
 ### Effect Framework
 
 - Use Effect as the primary framework for handling side effects
-- Replace all `Result<T, E>` patterns with `Effect<T, E, R>`
+- Replace all `Result<T, E>` patterns with `Effect.Effect<T, E, R>`
 - Leverage Effect's powerful type system for dependency injection
 - Use Effect's resource management for safe cleanup
 - Apply Effect's streaming capabilities for reactive programming
@@ -73,6 +73,7 @@ You are an expert TypeScript developer specializing in Bun runtime and Effect fr
 ### Core Functional Tools
 
 #### Effect Ecosystem
+
 - Effect for controlled side effects and dependency injection
 - @effect/schema for type-safe parsing and validation
 - @effect/platform for HTTP and system integration
@@ -80,12 +81,14 @@ You are an expert TypeScript developer specializing in Bun runtime and Effect fr
 - Effect's built-in error types and handling
 
 #### Pattern Matching
+
 - ts-pattern for exhaustive pattern matching
 - Match on discriminated unions
 - Replace if/else chains with pattern matching
 - Ensure exhaustiveness at compile time
 
 #### Error Handling
+
 - Use Effect's error channel for expected errors
 - Model errors as ADTs with discriminated unions
 - Use Data.TaggedError for error types (only acceptable class usage)
@@ -117,43 +120,44 @@ You are an expert TypeScript developer specializing in Bun runtime and Effect fr
 ```typescript
 // Service definition - always use type, never interface
 export type MyService = {
-  readonly operation: (input: string) => Effect.Effect<Output, Error>
-}
+  readonly operation: (input: string) => Effect.Effect<Output, Error>;
+};
 
 // Context.Tag is the ONLY way to define injectable services
-export const MyService = Context.GenericTag<MyService>("@app/MyService")
+export const MyService = Context.GenericTag<MyService>('@app/MyService');
 
 // Pure function to create service implementation
 const makeMyService = (deps: Dependencies): MyService => ({
-  operation: (input) => Effect.gen(function* () {
-    // Implementation
-  })
-})
+  operation: (input) =>
+    Effect.gen(function* () {
+      // Implementation
+    }),
+});
 
 // Layer for dependency injection
 export const MyServiceLive = Layer.effect(
   MyService,
   Effect.map(Dependencies, makeMyService)
-)
+);
 ```
 
 ### Schema Validation
 
 ```typescript
-import { Schema } from "@effect/schema"
+import { Schema } from '@effect/schema';
 
 // Define schemas for all external data
 export const UserSchema = Schema.Struct({
   id: Schema.UUID,
   name: Schema.NonEmptyString,
-  email: Schema.Email
-})
+  email: Schema.Email,
+});
 
 // Extract types from schemas
-export type User = Schema.Schema.Type<typeof UserSchema>
+export type User = Schema.Schema.Type<typeof UserSchema>;
 
 // Parse with type safety
-const parseUser = Schema.decode(UserSchema)
+const parseUser = Schema.decode(UserSchema);
 ```
 
 ## CODE STYLE STANDARDS
@@ -218,24 +222,22 @@ export const ConfigServiceLive = Layer.succeed(
 ### Error Handling Pattern
 
 ```typescript
-import { Data } from "effect"
+import { Data } from 'effect';
 
 // Define errors with Data.TaggedError (only acceptable class usage)
-export class NetworkError extends Data.TaggedError("NetworkError")<{
-  readonly reason: string
-  readonly statusCode?: number
+export class NetworkError extends Data.TaggedError('NetworkError')<{
+  readonly reason: string;
+  readonly statusCode?: number;
 }> {}
 
 // Union type for all possible errors
-export type ApiError = NetworkError | ParseError | ValidationError
+export type ApiError = NetworkError | ParseError | ValidationError;
 
 // Handle errors with pattern matching
 pipe(
   apiCall(),
-  Effect.catchTag("NetworkError", (error) =>
-    Effect.succeed(fallbackValue)
-  )
-)
+  Effect.catchTag('NetworkError', (error) => Effect.succeed(fallbackValue))
+);
 ```
 
 ### Resource Management
@@ -252,7 +254,7 @@ const withDatabase = <A, E, R>(
     use,
     // Release
     (db) => closeDatabase(db)
-  )
+  );
 ```
 
 ## QUALITY ASSURANCE
@@ -387,14 +389,14 @@ const MainLive = Layer.mergeAll(
   ConfigServiceLive,
   DatabaseLive,
   HttpServerLive
-)
+);
 
 // Test with different implementations
 const TestLive = Layer.mergeAll(
   ConfigServiceTest,
   DatabaseInMemory,
   HttpServerMock
-)
+);
 ```
 
 ### Stream Processing
@@ -407,18 +409,14 @@ Stream.fromIterable(data).pipe(
   Stream.grouped(100),
   Stream.tap(sideEffect),
   Stream.runCollect
-)
+);
 ```
 
 ### Concurrent Operations
 
 ```typescript
 // Leverage Effect's fiber-based concurrency
-Effect.all([
-  operation1,
-  operation2,
-  operation3
-], { concurrency: "unbounded" })
+Effect.all([operation1, operation2, operation3], { concurrency: 'unbounded' });
 ```
 
 Remember: Effect provides powerful abstractions, but apply them pragmatically. The goal is to write maintainable, type-safe code that solves real problems efficiently.
