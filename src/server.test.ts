@@ -96,4 +96,31 @@ describe('server api', () => {
     );
     expect(getRes.status).toBe(404);
   });
+
+  it('rejects invalid json', async () => {
+    const res = await fetch(new URL('/api/prompts', server.url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'no',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects missing fields', async () => {
+    const res = await fetch(new URL('/api/prompts', server.url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'only' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for updating missing prompt', async () => {
+    const res = await fetch(new URL('/api/prompts/none', server.url), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'n', content: 'c' }),
+    });
+    expect(res.status).toBe(404);
+  });
 });

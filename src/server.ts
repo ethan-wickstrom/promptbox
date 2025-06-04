@@ -7,6 +7,13 @@ import {
   updatePrompt,
 } from './prompts';
 import { match } from 'ts-pattern';
+import {
+  parseJson,
+  toResponse,
+  toEmptyResponse,
+  validatePromptInput,
+  type PromptInput,
+} from './router';
 
 const buildHtml = (body: string): string => `<!DOCTYPE html>
 <html lang="en">
@@ -37,45 +44,25 @@ export const createServer = () =>
       '/api/prompts': {
         GET: () => Response.json(listPrompts()),
         POST: async req => {
-          const { name, content } = await req.json();
-          if (typeof name !== 'string' || typeof content !== 'string') {
-            return new Response('Invalid', { status: 400 });
-          }
-          const result = addPrompt(name, content);
-          return result.match(
-            prompt => Response.json(prompt, { status: 201 }),
-            err =>
-              match(err)
-                .with({ type: 'invalid-input' }, e => new Response(e.reason, { status: 400 }))
-                .otherwise(() => new Response('Not Found', { status: 404 })),
-          );
+          const raw = await parseJson<Record<string, unknown>>(req);
+          if (raw.isErr()) return raw.error;
+          const input = validatePromptInput(raw.value);
+          if (input.isErr()) return input.error;
+          return toResponse(addPrompt(input.value.name, input.value.content), 201);
         },
       },
       '/api/prompts/:id': {
-        GET: req =>
-          getPrompt(req.params.id).match(
-            prompt => Response.json(prompt),
-            () => new Response('Not Found', { status: 404 }),
-          ),
+        GET: req => toResponse(getPrompt(req.params.id)),
         PUT: async req => {
-          const { name, content } = await req.json();
-          if (typeof name !== 'string' || typeof content !== 'string') {
-            return new Response('Invalid', { status: 400 });
-          }
-          const result = updatePrompt(req.params.id, name, content);
-          return result.match(
-            prompt => Response.json(prompt),
-            error =>
-              match(error)
-                .with({ type: 'invalid-input' }, e => new Response(e.reason, { status: 400 }))
-                .otherwise(() => new Response('Not Found', { status: 404 })),
+          const raw = await parseJson<Record<string, unknown>>(req);
+          if (raw.isErr()) return raw.error;
+          const input = validatePromptInput(raw.value);
+          if (input.isErr()) return input.error;
+          return toResponse(
+            updatePrompt(req.params.id, input.value.name, input.value.content),
           );
         },
-        DELETE: req =>
-          deletePrompt(req.params.id).match(
-            () => new Response(null, { status: 204 }),
-            () => new Response('Not Found', { status: 404 }),
-          ),
+        DELETE: req => toEmptyResponse(deletePrompt(req.params.id)),
       },
     },
   });
