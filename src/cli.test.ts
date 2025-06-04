@@ -3,7 +3,9 @@ import { PassThrough } from 'stream';
 import { join } from 'path';
 import { existsSync, rmSync } from 'fs';
 import { TuiMenu, ask } from './tui';
-import { addPrompt, closeDb, listPrompts } from './prompts';
+import { createPromptStore } from './prompts';
+
+const { addPrompt, closeDb, listPrompts } = createPromptStore();
 
 const DATA_DIR = join(process.cwd(), 'data');
 const DB_FILE = join(DATA_DIR, 'prompts.sqlite');

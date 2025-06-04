@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import {
+import { createPromptStore } from './prompts';
+
+const {
   addPrompt,
   deletePrompt,
   getPrompt,
   listPrompts,
   updatePrompt,
   closeDb,
-} from './prompts';
+} = createPromptStore();
 import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
 

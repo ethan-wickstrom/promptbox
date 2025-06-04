@@ -1,7 +1,6 @@
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { createServer } from './server';
+import { createServer, closeDb } from './server';
 import { existsSync, rmSync } from 'fs';
-import { closeDb } from './prompts';
 import { join } from 'path';
 
 const DB_FILE = join(process.cwd(), 'data', 'prompts.sqlite');

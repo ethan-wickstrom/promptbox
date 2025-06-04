@@ -1,11 +1,14 @@
 import { match } from 'ts-pattern';
-import {
+import { createPromptStore } from './prompts';
+
+const {
   addPrompt,
   deletePrompt,
   getPrompt,
   listPrompts,
   updatePrompt,
-} from './prompts';
+  closeDb,
+} = createPromptStore();
 import { TuiMenu, ask } from './tui';
 
 const actions = [
@@ -91,6 +94,7 @@ const main = async (): Promise<void> => {
       })
       .exhaustive();
   }
+  closeDb();
 };
 
 main();
