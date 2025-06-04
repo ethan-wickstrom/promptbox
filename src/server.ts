@@ -2,6 +2,7 @@ import console from "node:console"
 import { serve } from "bun"
 import indexPage from "../index.html"
 import { createPromptStore } from "./prompts.ts"
+import { Effect, Exit } from "effect"
 
 const { addPrompt, deletePrompt, getPrompt, listPrompts, updatePrompt, closeDb } = createPromptStore()
 export { closeDb }
@@ -49,16 +50,16 @@ export const createServer = (): Server => {
     routes: {
       "/": indexPage,
       "/prompt/:id": (req): Response => {
-        const result = getPrompt(req.params.id)
-        return result.match(
-          (prompt) => {
+        const exit = Effect.runSyncExit(getPrompt(req.params.id))
+        return Exit.match(exit, {
+          onSuccess: (prompt): Response => {
             const body = `<h1 class="text-2xl mb-4">${prompt.name}</h1><pre class="whitespace-pre-wrap">${prompt.content}</pre>`
             return new Response(buildHtml(body), {
               headers: { "Content-Type": "text/html" }
             })
           },
-          () => new Response("Not Found", { status: 404 })
-        )
+          onFailure: (): Response => new Response("Not Found", { status: 404 })
+        })
       }
     },
     fetch: (req): Promise<Response> | Response => router.handle(req)

@@ -1,5 +1,5 @@
 import { type Changes, Database, type SQLQueryBindings } from "bun:sqlite"
-import { type Result, err, ok } from "neverthrow"
+import { Effect } from "effect"
 
 export type DbError =
   | { readonly type: "connection-failed"; readonly reason: string }
@@ -7,51 +7,67 @@ export type DbError =
   | { readonly type: "constraint-violation"; readonly reason: string }
 
 export type DbConnection = {
-  readonly all: <T>(query: string, params: readonly SQLQueryBindings[]) => Result<readonly T[], DbError>
-  readonly run: (query: string, params: readonly SQLQueryBindings[]) => Result<Changes, DbError>
+  readonly all: <T>(query: string, params: readonly SQLQueryBindings[]) => Effect.Effect<readonly T[], DbError>
+  readonly run: (query: string, params: readonly SQLQueryBindings[]) => Effect.Effect<Changes, DbError>
   readonly close: () => void
 }
 
-export const createConnection = (dbPath: string): Result<DbConnection, DbError> => {
-  try {
-    const db = new Database(dbPath)
-    db.exec("PRAGMA journal_mode = WAL;")
+export const createConnection = (dbPath: string): Effect.Effect<DbConnection, DbError> =>
+  Effect.try({
+    try: (): DbConnection => {
+      const db = new Database(dbPath)
+      db.exec("PRAGMA journal_mode = WAL;")
 
-    const all = <T>(query: string, params: readonly SQLQueryBindings[]): Result<readonly T[], DbError> => {
-      try {
-        const stmt = db.prepare(query)
-        return ok(stmt.all(...params) as readonly T[])
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("UNIQUE constraint")) {
-          const e: DbError = { type: "constraint-violation", reason: error.message }
-          return err(e)
-        }
-        const e: DbError = { type: "query-failed", reason: String(error) }
-        return err(e)
+      const all = <T>(query: string, params: readonly SQLQueryBindings[]): Effect.Effect<readonly T[], DbError> =>
+        Effect.try({
+          try: (): readonly T[] => {
+            const stmt = db.prepare(query)
+            return stmt.all(...params) as readonly T[]
+          },
+          catch: (error: unknown): DbError => {
+            if (error instanceof Error && error.message.includes("UNIQUE constraint")) {
+              const e: DbError = {
+                type: "constraint-violation",
+                reason: error.message
+              }
+              return e
+            }
+            const e: DbError = {
+              type: "query-failed",
+              reason: String(error)
+            }
+            return e
+          }
+        })
+
+      const run = (query: string, params: readonly SQLQueryBindings[]): Effect.Effect<Changes, DbError> =>
+        Effect.try({
+          try: (): Changes => {
+            const stmt = db.prepare(query)
+            return stmt.run(...params)
+          },
+          catch: (error: unknown): DbError => {
+            if (error instanceof Error && error.message.includes("UNIQUE constraint")) {
+              const e: DbError = {
+                type: "constraint-violation",
+                reason: error.message
+              }
+              return e
+            }
+            const e: DbError = {
+              type: "query-failed",
+              reason: String(error)
+            }
+            return e
+          }
+        })
+
+      const connection: DbConnection = {
+        all,
+        run,
+        close: () => db.close(false)
       }
-    }
-
-    const run = (query: string, params: readonly SQLQueryBindings[]): Result<Changes, DbError> => {
-      try {
-        const stmt = db.prepare(query)
-        return ok(stmt.run(...params))
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("UNIQUE constraint")) {
-          const e: DbError = { type: "constraint-violation", reason: error.message }
-          return err(e)
-        }
-        const e: DbError = { type: "query-failed", reason: String(error) }
-        return err(e)
-      }
-    }
-
-    const connection: DbConnection = {
-      all,
-      run,
-      close: () => db.close(false)
-    }
-    return ok(connection)
-  } catch (error) {
-    return err({ type: "connection-failed", reason: String(error) })
-  }
-}
+      return connection
+    },
+    catch: (error: unknown): DbError => ({ type: "connection-failed", reason: String(error) })
+  })
