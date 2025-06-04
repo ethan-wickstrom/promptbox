@@ -45,7 +45,7 @@ describe('server api', () => {
     });
     const created = await createRes.json();
     const getRes = await fetch(
-      new URL(`/api/prompts/${created.id}`, server.url),
+      new URL(`/api/prompts/${created.id}`, server.url)
     );
     expect(getRes.status).toBe(200);
     const prompt = await getRes.json();
@@ -66,7 +66,7 @@ describe('server api', () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'new', content: 'updated' }),
-      },
+      }
     );
     expect(updateRes.status).toBe(200);
     const updated = await updateRes.json();
@@ -83,16 +83,16 @@ describe('server api', () => {
     const created = await createRes.json();
     const deleteRes = await fetch(
       new URL(`/api/prompts/${created.id}`, server.url),
-      { method: 'DELETE' },
+      { method: 'DELETE' }
     );
     expect(deleteRes.status).toBe(204);
     const listRes = await fetch(new URL('/api/prompts', server.url));
     const prompts = await listRes.json();
     expect(prompts.find((p: { id: string }) => p.id === created.id)).toBe(
-      undefined,
+      undefined
     );
     const getRes = await fetch(
-      new URL(`/api/prompts/${created.id}`, server.url),
+      new URL(`/api/prompts/${created.id}`, server.url)
     );
     expect(getRes.status).toBe(404);
   });
