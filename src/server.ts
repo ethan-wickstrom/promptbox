@@ -1,11 +1,15 @@
 import indexPage from '../index.html';
-import {
+import { createPromptStore } from './prompts';
+
+const {
   addPrompt,
   deletePrompt,
   getPrompt,
   listPrompts,
   updatePrompt,
-} from './prompts';
+  closeDb,
+} = createPromptStore();
+export { closeDb };
 import {
   Router,
   toResponse,
