@@ -1,21 +1,7 @@
-import process from "node:process"
-import type { Readable, Writable } from "node:stream"
+import { KeyInput, Terminal } from "@effect/platform"
 import { Effect, Ref } from "effect"
 import { match } from "ts-pattern"
 import { IOError } from "../../errors.ts"
-
-export type MenuOptions = {
-  readonly input?: Readable
-  readonly output?: Writable
-}
-
-// Key codes
-const KEY_UP = "\u001b[A"
-const KEY_DOWN = "\u001b[B"
-const KEY_ENTER = "\r"
-
-// ANSI escape codes
-const CLEAR_SCREEN = "\x1b[2J\x1b[0f"
 
 // Menu state
 type MenuState = {
@@ -24,24 +10,15 @@ type MenuState = {
 }
 
 // Render the menu to the output stream
-const render = (output: Writable, state: MenuState): Effect.Effect<void, IOError> =>
-  Effect.async<void, IOError>((resume) => {
-    try {
-      output.write(CLEAR_SCREEN)
-      state.items.forEach((item, i) => {
-        const prefix = i === state.index ? "> " : "  "
-        output.write(`${prefix}${item}\n`)
-      })
-      resume(Effect.void)
-    } catch (error) {
-      resume(
-        Effect.fail(
-          new IOError({
-            operation: "menu-render",
-            reason: error instanceof Error ? error.message : String(error)
-          })
-        )
-      )
+const render = (state: MenuState): Effect.Effect<void, never, Terminal.Terminal> =>
+  Effect.gen(function* () {
+    const terminal = yield* Terminal.Terminal
+    yield* terminal.display("\u001B[?25l") // hide cursor
+    yield* terminal.display("\u001B[2J\u001B[H") // clear screen
+    for (let i = 0; i < state.items.length; i++) {
+      const item = state.items[i]!
+      const prefix = i === state.index ? "> " : "  "
+      yield* terminal.display(`${prefix}${item}\n`)
     }
   })
 
@@ -53,111 +30,54 @@ const moveCursor = (delta: number, state: MenuState): MenuState => {
 }
 
 // Run the menu and return the selected index
-export const runMenu = (items: readonly string[], options: MenuOptions = {}): Effect.Effect<number, IOError> => {
-  const input = options.input ?? process.stdin
-  const output = options.output ?? process.stdout
+export const runMenu = (
+  items: readonly string[]
+): Effect.Effect<number, IOError, Terminal.Terminal | KeyInput.KeyInput> =>
+  Effect.gen(function* () {
+    const keyInput = yield* KeyInput.KeyInput
+    const terminal = yield* Terminal.Terminal
 
-  return Effect.gen(function* () {
     // Initialize state
     const stateRef = yield* Ref.make<MenuState>({ index: 0, items })
 
-    // Set raw mode if available
-    yield* Effect.sync(() => {
-      if (typeof (input as NodeJS.ReadStream).setRawMode === "function") {
-        ;(input as NodeJS.ReadStream).setRawMode(true)
-      }
-    })
+    const selectedIndex = yield* Effect.scoped(
+      Effect.gen(function* () {
+        // Set raw mode
+        yield* terminal.setRaw(true)
 
-    // Initial render
-    const initialState = yield* Ref.get(stateRef)
-    yield* render(output, initialState)
+        // Initial render
+        const initialState = yield* Ref.get(stateRef)
+        yield* render(initialState)
 
-    // Handle input
-    const selectedIndex = yield* Effect.async<number, IOError>((resume) => {
-      const onData = (data: Buffer): void => {
-        const key = data.toString()
-
-        Effect.runSync(
-          Effect.gen(function* () {
-            const state = yield* Ref.get(stateRef)
-
-            const result = match(key)
-              .with(KEY_UP, () => {
-                const newState = moveCursor(-1, state)
-                return Effect.all([Ref.set(stateRef, newState), render(output, newState)])
-              })
-              .with(KEY_DOWN, () => {
-                const newState = moveCursor(1, state)
-                return Effect.all([Ref.set(stateRef, newState), render(output, newState)])
-              })
-              .with(KEY_ENTER, () => {
-                cleanup()
-                resume(Effect.succeed(state.index))
-                return Effect.void
-              })
-              .otherwise(() => Effect.void)
-
-            yield* result
-          }).pipe(
-            Effect.catchAll((error) => {
-              cleanup()
-              resume(Effect.fail(error))
-              return Effect.void
+        const loop: Effect.Effect<number, never, never> = Effect.gen(function* () {
+          const key = yield* keyInput.read()
+          const state = yield* Ref.get(stateRef)
+          return yield* match(key)
+            .with({ key: "up" }, () => {
+              const newState = moveCursor(-1, state)
+              return Ref.set(stateRef, newState).pipe(Effect.andThen(render(newState)), Effect.andThen(loop))
             })
-          )
-        )
-      }
-
-      const onError = (error: Error): void => {
-        cleanup()
-        resume(
-          Effect.fail(
-            new IOError({
-              operation: "menu-input",
-              reason: error.message
+            .with({ key: "down" }, () => {
+              const newState = moveCursor(1, state)
+              return Ref.set(stateRef, newState).pipe(Effect.andThen(render(newState)), Effect.andThen(loop))
             })
-          )
-        )
-      }
+            .with({ key: "return" }, () => Effect.succeed(state.index))
+            .with({ key: "c", ctrl: true }, () => Effect.die("User interrupted"))
+            .otherwise(() => loop)
+        }).pipe(Effect.flatten)
 
-      const cleanup = (): void => {
-        input.removeListener("data", onData)
-        input.removeListener("error", onError)
-        input.pause()
-      }
+        return yield* loop
+      })
+    )
 
-      // Set up event listeners
-      input.resume()
-      input.on("data", onData)
-      input.on("error", onError)
-
-      // Return cleanup function
-      return Effect.sync(cleanup)
-    })
-
-    // Clean up: restore terminal settings
-    yield* Effect.sync(() => {
-      if (typeof (input as NodeJS.ReadStream).setRawMode === "function") {
-        ;(input as NodeJS.ReadStream).setRawMode(false)
-      }
-      output.write("\n")
-    })
-
+    yield* terminal.display("\u001B[?25h") // show cursor
     return selectedIndex
-  })
-}
-
-// Legacy class wrapper for backward compatibility
-export class TuiMenu {
-  private readonly items: readonly string[]
-  private readonly options: MenuOptions
-
-  constructor(items: readonly string[], options: MenuOptions = {}) {
-    this.items = items
-    this.options = options
-  }
-
-  async run(): Promise<number> {
-    return await Effect.runPromise(runMenu(this.items, this.options))
-  }
-}
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new IOError({
+          operation: "menu",
+          reason: String(error)
+        })
+    )
+  )

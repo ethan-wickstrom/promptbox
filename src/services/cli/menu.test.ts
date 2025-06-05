@@ -1,20 +1,23 @@
 import { describe, expect, it } from "bun:test"
-import { PassThrough } from "node:stream"
-import { TuiMenu } from "./menu.ts"
+import { TestKeyInput, TestTerminal } from "@effect/platform/test"
+import { Effect, Exit } from "effect"
+import { runMenu } from "./menu.ts"
 
-const arrowDown = "\u001b[B"
-const enter = "\r"
+const arrowDown = { key: "down" }
+const enter = { key: "return" }
 
-describe("TuiMenu", () => {
-  it("returns selected index", async () => {
-    const input = new PassThrough()
-    const output = new PassThrough()
-    const menu = new TuiMenu(["a", "b", "c"], { input, output })
-    const runPromise = menu.run()
-    input.write(arrowDown)
-    input.write(arrowDown)
-    input.write(enter)
-    const index = await runPromise
-    expect(index).toBe(2)
+describe("runMenu", () => {
+  it("returns selected index", async (): Promise<void> => {
+    const program = runMenu(["a", "b", "c"])
+    const exit = await Effect.runPromiseExit(
+      program.pipe(
+        Effect.provide(TestKeyInput.layer({ keys: [arrowDown, arrowDown, enter] })),
+        Effect.provide(TestTerminal.layer({}))
+      )
+    )
+    expect(Exit.isSuccess(exit)).toBe(true)
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value).toBe(2)
+    }
   })
 })

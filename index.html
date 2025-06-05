@@ -47,8 +47,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, content }),
       });
-      (document.getElementById('name').value = ''),
-        (document.getElementById('content').value = '');
+      document.getElementById('name').value = '';
+      document.getElementById('content').value = '';
       load();
     });
 

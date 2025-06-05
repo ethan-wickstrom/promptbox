@@ -1,5 +1,5 @@
-import { ParseResult, Schema } from "@effect/schema"
 import type { Changes } from "bun:sqlite"
+import { Schema, TreeFormatter } from "@effect/schema"
 import { Context, Effect, Layer, pipe } from "effect"
 import { NotFoundError, ValidationError } from "../errors.ts"
 import type { Prompt } from "../types.ts"
@@ -31,14 +31,17 @@ const generateId = (): string =>
 
 // Pure function to create the service
 const makePromptService = (database: DatabaseService): PromptService => {
-  const validateInput = (name: string, content: string) =>
+  const validateInput = (
+    name: string,
+    content: string
+  ): Effect.Effect<{ name: string; content: string }, ValidationError> =>
     pipe(
       Schema.decodeUnknown(PromptInputSchema)({ name, content }),
       Effect.mapError(
         (error) =>
           new ValidationError({
             field: "input",
-            reason: ParseResult.formatErrorSync(error).message.split("\n")[0] ?? "Invalid input"
+            reason: TreeFormatter.formatErrorSync(error)
           })
       )
     )
@@ -67,21 +70,21 @@ const makePromptService = (database: DatabaseService): PromptService => {
     )
 
   const getById = (id: string): Effect.Effect<Prompt, NotFoundError> =>
-    database.withConnection((conn) =>
-      pipe(
-        conn.all<Prompt>("SELECT id, name, content FROM prompts WHERE id = ?", [id]),
-        Effect.flatMap((rows) => {
-          const [first] = rows
-          return first ? Effect.succeed(first) : Effect.fail(new NotFoundError({ type: "prompt", id }))
-        })
+    database
+      .withConnection((conn) =>
+        pipe(
+          conn.all<Prompt>("SELECT id, name, content FROM prompts WHERE id = ?", [id]),
+          Effect.flatMap((rows) => {
+            const [first] = rows
+            return first ? Effect.succeed(first) : Effect.fail(new NotFoundError({ type: "prompt", id }))
+          })
+        )
       )
-    ).pipe(
-      Effect.catchAll(() => Effect.fail(new NotFoundError({ type: "prompt", id })))
-    )
+      .pipe(Effect.catchAll(() => Effect.fail(new NotFoundError({ type: "prompt", id }))))
 
-  const list: Effect.Effect<readonly Prompt[], never> = database.withConnection((conn) =>
-    conn.all<Prompt>("SELECT id, name, content FROM prompts ORDER BY created_at DESC")
-  ).pipe(Effect.catchAll(() => Effect.succeed([])))
+  const list: Effect.Effect<readonly Prompt[], never> = database
+    .withConnection((conn) => conn.all<Prompt>("SELECT id, name, content FROM prompts ORDER BY created_at DESC"))
+    .pipe(Effect.catchAll(() => Effect.succeed([])))
 
   const update = (id: string, name: string, content: string): Effect.Effect<Prompt, ValidationError | NotFoundError> =>
     pipe(
@@ -111,25 +114,20 @@ const makePromptService = (database: DatabaseService): PromptService => {
           reason: `Failed to update prompt: ${error._tag}`
         })
       })
-    ).pipe(
-      Effect.catchAll((error) =>
-        error && error._tag === "NotFoundError"
-          ? Effect.fail(error)
-          : Effect.fail(new ValidationError({ field: "database", reason: `Failed to update prompt: ${error?._tag ?? "unknown"}` }))
-      )
     )
 
   const deletePrompt = (id: string): Effect.Effect<void, NotFoundError> =>
-    database.withConnection((conn) =>
-      pipe(
-        conn.run("DELETE FROM prompts WHERE id = ?", [id]),
-        Effect.flatMap((result: Changes): Effect.Effect<void, NotFoundError> =>
-          result.changes === 0 ? Effect.fail(new NotFoundError({ type: "prompt", id })) : Effect.void
+    database
+      .withConnection((conn) =>
+        pipe(
+          conn.run("DELETE FROM prompts WHERE id = ?", [id]),
+          Effect.flatMap(
+            (result: Changes): Effect.Effect<void, NotFoundError> =>
+              result.changes === 0 ? Effect.fail(new NotFoundError({ type: "prompt", id })) : Effect.void
+          )
         )
       )
-    ).pipe(
-      Effect.catchAll(() => Effect.fail(new NotFoundError({ type: "prompt", id })))
-    )
+      .pipe(Effect.catchAll(() => Effect.fail(new NotFoundError({ type: "prompt", id }))))
 
   return {
     create,
@@ -156,7 +154,7 @@ export const PromptServiceTest = Layer.succeed(
     const prompts = new Map<string, Prompt>()
 
     return {
-      create: (name: string, content: string) =>
+      create: (name: string, content: string): Effect.Effect<Prompt, ValidationError> =>
         Effect.gen(function* () {
           const input = yield* pipe(
             Schema.decodeUnknown(PromptInputSchema)({ name, content }),
@@ -164,7 +162,7 @@ export const PromptServiceTest = Layer.succeed(
               (error) =>
                 new ValidationError({
                   field: "input",
-                  reason: ParseResult.formatErrorSync(error).message.split("\n")[0] ?? "Invalid input"
+                  reason: TreeFormatter.formatErrorSync(error)
                 })
             )
           )
@@ -190,7 +188,7 @@ export const PromptServiceTest = Layer.succeed(
               (error) =>
                 new ValidationError({
                   field: "input",
-                  reason: ParseResult.formatErrorSync(error).message.split("\n")[0] ?? "Invalid input"
+                  reason: TreeFormatter.formatErrorSync(error)
                 })
             )
           )

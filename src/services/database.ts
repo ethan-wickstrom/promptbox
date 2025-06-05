@@ -28,6 +28,32 @@ export type DatabaseService = {
 // Context.Tag for dependency injection
 export const DatabaseService = Context.GenericTag<DatabaseService>("@services/Database")
 
+// Helper function to classify database errors
+const classifyError = (error: unknown): QueryError | ConstraintError => {
+  if (!(error instanceof Error)) {
+    return new QueryError({ reason: String(error) })
+  }
+
+  const message = error.message
+
+  if (message.includes("UNIQUE constraint")) {
+    const match = message.match(/UNIQUE constraint failed: (.+)/)
+    return new ConstraintError({
+      constraint: match?.[1] ?? "UNIQUE",
+      reason: message
+    })
+  }
+
+  if (message.includes("FOREIGN KEY constraint")) {
+    return new ConstraintError({
+      constraint: "FOREIGN KEY",
+      reason: message
+    })
+  }
+
+  return new QueryError({ reason: message })
+}
+
 // Create a database connection with proper resource management
 const makeConnection = (dbPath: string): Effect.Effect<DbConnection, ConnectionError, Scope.Scope> =>
   Effect.acquireRelease(
@@ -42,27 +68,8 @@ const makeConnection = (dbPath: string): Effect.Effect<DbConnection, ConnectionE
     }),
     (db) => Effect.sync(() => db.close(false))
   ).pipe(
-    Effect.map((db): DbConnection => {
-      const handleError = (error: unknown): QueryError | ConstraintError => {
-        if (error instanceof Error) {
-          if (error.message.includes("UNIQUE constraint")) {
-            const match = error.message.match(/UNIQUE constraint failed: (.+)/)
-            return new ConstraintError({
-              constraint: match?.[1] ?? "UNIQUE",
-              reason: error.message
-            })
-          }
-          if (error.message.includes("FOREIGN KEY constraint")) {
-            return new ConstraintError({
-              constraint: "FOREIGN KEY",
-              reason: error.message
-            })
-          }
-        }
-        return new QueryError({ reason: String(error) })
-      }
-
-      return {
+    Effect.map(
+      (db): DbConnection => ({
         all: <T>(
           query: string,
           params: readonly SQLQueryBindings[] = []
@@ -72,7 +79,7 @@ const makeConnection = (dbPath: string): Effect.Effect<DbConnection, ConnectionE
               const stmt = db.prepare(query)
               return stmt.all(...params) as readonly T[]
             },
-            catch: handleError
+            catch: classifyError
           }),
 
         run: (
@@ -84,16 +91,18 @@ const makeConnection = (dbPath: string): Effect.Effect<DbConnection, ConnectionE
               const stmt = db.prepare(query)
               return stmt.run(...params)
             },
-            catch: handleError
+            catch: classifyError
           }),
 
         exec: (query: string): Effect.Effect<void, QueryError> =>
           Effect.try({
-            try: (): void => db.exec(query),
+            try: () => {
+              db.exec(query)
+            },
             catch: (error: unknown): QueryError => new QueryError({ query, reason: String(error) })
           })
-      }
-    })
+      })
+    )
   )
 
 // Create the database service
@@ -108,10 +117,13 @@ const makeDatabaseService = (dbPath: string): DatabaseService => {
     use: (conn: DbConnection) => Effect.Effect<A, E, R>
   ): Effect.Effect<A, E | DatabaseError, R> =>
     Effect.scoped(
-      Pool.get(connectionPool).pipe(
+      connectionPool.pipe(
+        Effect.flatMap((pool) => Pool.get(pool)),
         Effect.flatMap(use),
-        Effect.catchTag("ConnectionError", (error: ConnectionError) =>
-          Effect.fail(new DatabaseError({ reason: `Database connection failed: ${error.reason}` }))
+        Effect.catchTag(
+          "ConnectionError",
+          (error): Effect.Effect<never, DatabaseError> =>
+            Effect.fail(new DatabaseError({ reason: `Database connection failed: ${error.reason}` }))
         )
       )
     )
@@ -144,7 +156,7 @@ export const DatabaseServiceLive = Layer.effect(
   DatabaseService,
   Effect.gen(function* () {
     const config = yield* ConfigService
-    const dataDir = yield* config.getDataDir
+    const dataDir = config.dataDir
     const dbPath = join(dataDir, "prompts.sqlite")
     const service = makeDatabaseService(dbPath)
 

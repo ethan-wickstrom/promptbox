@@ -1,134 +1,108 @@
-import { readFileSync } from "node:fs"
-import { BunHttpServer } from "@effect/platform-bun"
-import { Context, Effect, Layer, pipe } from "effect"
-import { HttpError } from "../errors.ts"
-import { Router, mapDomainError, toEmptyResponse, toJsonResponse, validatePromptInput } from "../router.ts"
-import { ConfigService } from "./config.ts"
+import { FileSystem } from "@effect/platform"
+import {
+  HttpApp,
+  HttpRouter,
+  HttpServer,
+  HttpServerError,
+  HttpServerRequest,
+  HttpServerResponse
+} from "@effect/platform"
+import { Schema } from "@effect/schema"
+import { Effect, Layer } from "effect"
+import { NotFoundError, ValidationError } from "../errors.ts"
 import { PromptService } from "./prompt.ts"
 
-// Service type definition
-export type HttpService = {
-  readonly router: Router<HttpError>
-  readonly getUrl: Effect.Effect<string, never>
-}
+const PromptInputSchema = Schema.Struct({
+  name: Schema.NonEmptyString,
+  content: Schema.NonEmptyString
+})
 
-// Context.Tag for dependency injection
-export const HttpService = Context.GenericTag<HttpService>("@services/Http")
-
-// Build the HTML response
-const buildHtml = (body: string): string => `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <title>Promptbox</title>
-</head>
-<body class="p-4 font-sans">${body}</body>
-</html>`
-
-// Create the HTTP service
-const makeHttpService = (promptService: PromptService, config: ConfigService): HttpService => {
-  // Middleware to add headers
-  const addHeadersMiddleware = (_req: Request, next: () => Effect.Effect<Response, HttpError>) =>
-    pipe(
-      next(),
-      Effect.map((response) => {
-        response.headers.set("X-Powered-By", "Promptbox")
-        return response
-      })
-    )
-
-  // Create the router with all routes
-  const router = new Router<HttpError>()
-    .use(addHeadersMiddleware)
-    // API Routes
-    .get("/api/prompts", ({ query }) =>
-      pipe(
-        promptService.list,
-        Effect.map((prompts) => {
-          const limitRaw = query.limit
-          if (typeof limitRaw === "string") {
-            const limit = Number.parseInt(limitRaw, 10)
-            if (!Number.isNaN(limit) && limit >= 0) {
-              return prompts.slice(0, limit)
-            }
-          }
-          return prompts
-        }),
-        toJsonResponse(mapDomainError)
-      )
-    )
-    .post("/api/prompts", validatePromptInput, ({ body }) =>
-      pipe(promptService.create(body.name, body.content), toJsonResponse(mapDomainError, 201))
-    )
-    .get("/api/prompts/:id", ({ params }) => pipe(promptService.getById(params.id), toJsonResponse(mapDomainError)))
-    .put("/api/prompts/:id", validatePromptInput, ({ params, body }) =>
-      pipe(promptService.update(params.id, body.name, body.content), toJsonResponse(mapDomainError))
-    )
-    .delete("/api/prompts/:id", ({ params }) => pipe(promptService.delete(params.id), toEmptyResponse(mapDomainError)))
-    // Static routes
-    .get("/", () =>
-      Effect.try({
-        try: () => {
-          const content = readFileSync("index.html", "utf-8")
-          return new Response(content, {
-            headers: { "Content-Type": "text/html" }
-          })
-        },
-        catch: () =>
-          new HttpError({
-            statusCode: 404,
-            reason: "Not Found"
-          })
-      }).pipe(Effect.catchAll((error) => Effect.succeed(new Response(error.reason, { status: error.statusCode }))))
-    )
-    // Prompt detail page
-    .get("/prompt/:id", ({ params }) =>
-      pipe(
-        promptService.getById(params.id),
-        Effect.map((prompt) => {
-          const body = `<h1 class="text-2xl mb-4">${prompt.name}</h1><pre class="whitespace-pre-wrap">${prompt.content}</pre>`
-          return new Response(buildHtml(body), {
-            headers: { "Content-Type": "text/html" }
-          })
-        }),
-        Effect.catchAll(() => Effect.succeed(new Response("Not Found", { status: 404 })))
-      )
-    )
-
-  const getUrl: Effect.Effect<string, never> = Effect.gen(function* () {
-    const port = yield* config.getPort
-    const host = yield* config.getHost
-    return `http://${host}:${port}`
-  })
-
-  return {
-    router,
-    getUrl
+const handleErrors = (error: unknown): HttpServerError.HttpServerError => {
+  if (error instanceof NotFoundError) {
+    return HttpServerError.notFound()
   }
+  if (error instanceof ValidationError) {
+    return HttpServerError.badRequest({ message: error.reason })
+  }
+  return HttpServerError.internalServerError()
 }
 
-// Create the Bun HTTP server
-export const createServer = (router: Router<HttpError>, port: number, hostname: string) =>
-  BunHttpServer.make({
-    port,
-    hostname
-  })(async (req: Request) => {
-    const response = await Effect.runPromise(
-      router
-        .handle(req)
-        .pipe(Effect.catchAll((error) => Effect.succeed(new Response(error.reason, { status: error.statusCode }))))
-    )
-    return response
-  })
+const apiRoutes = (promptService: PromptService): HttpRouter.HttpRouter<never, never> =>
+  HttpRouter.empty.pipe(
+    HttpRouter.get(
+      "/api/prompts",
+      Effect.gen(function* () {
+        const prompts = yield* promptService.list
+        return yield* HttpServerResponse.json(prompts)
+      })
+    ),
+    HttpRouter.post(
+      "/api/prompts",
+      Effect.gen(function* () {
+        const body = yield* HttpServerRequest.schemaBodyJson(PromptInputSchema)
+        const prompt = yield* promptService.create(body.name, body.content)
+        return yield* HttpServerResponse.json(prompt, { status: 201 })
+      })
+    ),
+    HttpRouter.get(
+      "/api/prompts/:id",
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params
+        const id = params["id"]
+        if (!id) {
+          return yield* Effect.fail(HttpServerError.badRequest())
+        }
+        const prompt = yield* promptService.getById(id)
+        return yield* HttpServerResponse.json(prompt)
+      })
+    ),
+    HttpRouter.put(
+      "/api/prompts/:id",
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params
+        const body = yield* HttpServerRequest.schemaBodyJson(PromptInputSchema)
+        const id = params["id"]
+        if (!id) {
+          return yield* Effect.fail(HttpServerError.badRequest())
+        }
+        const prompt = yield* promptService.update(id, body.name, body.content)
+        return yield* HttpServerResponse.json(prompt)
+      })
+    ),
+    HttpRouter.del(
+      "/api/prompts/:id",
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params
+        const id = params["id"]
+        if (!id) {
+          return yield* Effect.fail(HttpServerError.badRequest())
+        }
+        yield* promptService.delete(id)
+        return HttpServerResponse.empty()
+      })
+    ),
+    HttpRouter.catchAll((error) => Effect.fail(handleErrors(error)))
+  )
 
-// Layer implementation
-export const HttpServiceLive = Layer.effect(
-  HttpService,
+const staticRoutes = HttpRouter.empty.pipe(
+  HttpRouter.get(
+    "/",
+    FileSystem.FileSystem.pipe(
+      Effect.flatMap((fs) => fs.readFileString("index.html")),
+      Effect.flatMap((content) => HttpServerResponse.html(content)),
+      Effect.catchTag("SystemError", (_e) => Effect.fail(HttpServerError.notFound()))
+    )
+  )
+)
+
+export const HttpLive = Layer.effect(
+  HttpServer.HttpServer,
   Effect.gen(function* () {
     const promptService = yield* PromptService
-    const config = yield* ConfigService
-    return makeHttpService(promptService, config)
+    const router = HttpRouter.empty.pipe(
+      HttpRouter.mount("/api", apiRoutes(promptService)),
+      HttpRouter.mountApp("/", HttpApp.toWebHandler(staticRoutes))
+    )
+    return HttpServer.router(router)
   })
 )

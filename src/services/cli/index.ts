@@ -1,13 +1,10 @@
-import { Console, Context, Effect, Layer, pipe } from "effect"
-import type { Logger } from "effect/Logger"
-// All usages must specify both type arguments: Logger<unknown, void>
+import { Terminal } from "@effect/platform"
+import { Context, Effect, Layer } from "effect"
 import { match } from "ts-pattern"
 import type { IOError, NotFoundError, ValidationError } from "../../errors.ts"
 import { PromptService } from "../prompt.ts"
 import { ask } from "./input.ts"
-import { TuiMenu, runMenu } from "./menu.ts"
-
-export { TuiMenu }
+import { runMenu } from "./menu.ts"
 
 // Menu actions
 const MenuActions = {
@@ -23,13 +20,13 @@ type MenuAction = (typeof MenuActions)[keyof typeof MenuActions]
 
 // Service type definition
 export type CliService = {
-  readonly run: Effect.Effect<void, never, Logger<unknown, void> | Console>
-  readonly showMenu: Effect.Effect<MenuAction, IOError>
-  readonly listPrompts: Effect.Effect<void, never, Console>
-  readonly viewPrompt: Effect.Effect<void, IOError | NotFoundError, Console>
-  readonly addPrompt: Effect.Effect<void, IOError | ValidationError, Console>
-  readonly updatePrompt: Effect.Effect<void, IOError | ValidationError | NotFoundError, Console>
-  readonly deletePrompt: Effect.Effect<void, IOError | NotFoundError, Console>
+  readonly run: Effect.Effect<void, never, Terminal.Terminal | Terminal.Key>
+  readonly showMenu: Effect.Effect<MenuAction, IOError, Terminal.Terminal | Terminal.Key>
+  readonly listPrompts: Effect.Effect<void, never, never>
+  readonly viewPrompt: Effect.Effect<void, IOError | NotFoundError, Terminal.Terminal>
+  readonly addPrompt: Effect.Effect<void, IOError | ValidationError, Terminal.Terminal>
+  readonly updatePrompt: Effect.Effect<void, IOError | ValidationError | NotFoundError, Terminal.Terminal>
+  readonly deletePrompt: Effect.Effect<void, IOError | NotFoundError, Terminal.Terminal>
 }
 
 // Context.Tag for dependency injection
@@ -37,79 +34,79 @@ export const CliService = Context.GenericTag<CliService>("@services/Cli")
 
 // Create the CLI service
 const makeCliService = (promptService: PromptService): CliService => {
-  // All Logger requirements are now Logger<unknown, void>
-
-  const showMenu: Effect.Effect<MenuAction, IOError> = pipe(
-    runMenu(Object.values(MenuActions)),
+  const showMenu = runMenu(Object.values(MenuActions)).pipe(
     Effect.map((index) => Object.values(MenuActions)[index] as MenuAction)
   )
 
-  const listPrompts: Effect.Effect<void, never, Console> = pipe(
-    promptService.list,
+  const log = (message: string): Effect.Effect<void, never, Terminal.Terminal> =>
+    Effect.gen(function* () {
+      const terminal = yield* Terminal.Terminal
+      yield* terminal.display(`${message}\n`)
+    })
+
+  const listPrompts: Effect.Effect<void, never, never> = promptService.list.pipe(
     Effect.flatMap((prompts) => {
       if (prompts.length === 0) {
-        return Console.log("No prompts found")
+        return log("No prompts found")
       }
       return Effect.all(
-        prompts.map((p) => Console.log(`${p.id}: ${p.name}`)),
+        prompts.map((p) => log(`${p.id}: ${p.name}`)),
         { discard: true }
       )
     })
   )
 
-  const viewPrompt: Effect.Effect<void, IOError | NotFoundError, Console> = pipe(
-    ask("Prompt id: "),
-    Effect.flatMap((id) => promptService.getById(id)),
-    Effect.flatMap((prompt) => Console.log(`Name: ${prompt.name}\nContent: ${prompt.content}`)),
+  const viewPrompt: Effect.Effect<void, IOError | NotFoundError, Terminal.Terminal> = Effect.gen(function* () {
+    const id = yield* ask("Prompt id: ")
+    const prompt = yield* promptService.getById(id)
+    yield* log(`Name: ${prompt.name}\nContent: ${prompt.content}`)
+  }).pipe(
     Effect.catchTags({
-      NotFoundError: (error): Effect.Effect<void, never, Console> =>
-        Console.log(`Error: Prompt not found with id: ${error.id}`),
-      IOError: (error): Effect.Effect<void, never, Console> => Console.log(`Error: ${error.reason}`)
+      NotFoundError: (error) => log(`Error: Prompt not found with id: ${error.id}`),
+      IOError: (error) => log(`Error: ${error.reason}`)
     })
   )
 
-  const addPrompt: Effect.Effect<void, IOError | ValidationError, Console> = Effect.gen(function* () {
+  const addPrompt: Effect.Effect<void, IOError | ValidationError, Terminal.Terminal> = Effect.gen(function* () {
     const name = yield* ask("Name: ")
     const content = yield* ask("Content: ")
     const prompt = yield* promptService.create(name, content)
-    yield* Console.log(`Added prompt ${prompt.id}`)
+    yield* log(`Added prompt ${prompt.id}`)
   }).pipe(
     Effect.catchTags({
-      ValidationError: (error): Effect.Effect<void, never, Console> => Console.log(`Error: ${error.reason}`),
-      IOError: (error): Effect.Effect<void, never, Console> => Console.log(`Error: ${error.reason}`)
+      ValidationError: (error) => log(`Error: ${error.reason}`),
+      IOError: (error) => log(`Error: ${error.reason}`)
     })
   )
 
-  const updatePrompt: Effect.Effect<void, IOError | ValidationError | NotFoundError, Console> = Effect.gen(
+  const updatePrompt: Effect.Effect<void, IOError | ValidationError | NotFoundError, Terminal.Terminal> = Effect.gen(
     function* () {
       const id = yield* ask("Id: ")
       const name = yield* ask("Name: ")
       const content = yield* ask("Content: ")
       const prompt = yield* promptService.update(id, name, content)
-      yield* Console.log(`Updated ${prompt.id}`)
+      yield* log(`Updated ${prompt.id}`)
     }
   ).pipe(
     Effect.catchTags({
-      ValidationError: (error): Effect.Effect<void, never, Console> => Console.log(`Error: ${error.reason}`),
-      NotFoundError: (error): Effect.Effect<void, never, Console> =>
-        Console.log(`Error: Prompt not found with id: ${error.id}`),
-      IOError: (error): Effect.Effect<void, never, Console> => Console.log(`Error: ${error.reason}`)
+      ValidationError: (error) => log(`Error: ${error.reason}`),
+      NotFoundError: (error) => log(`Error: Prompt not found with id: ${error.id}`),
+      IOError: (error) => log(`Error: ${error.reason}`)
     })
   )
 
-  const deletePrompt: Effect.Effect<void, IOError | NotFoundError, Console> = Effect.gen(function* () {
+  const deletePrompt: Effect.Effect<void, IOError | NotFoundError, Terminal.Terminal> = Effect.gen(function* () {
     const id = yield* ask("Id: ")
     yield* promptService.delete(id)
-    yield* Console.log("Deleted")
+    yield* log("Deleted")
   }).pipe(
     Effect.catchTags({
-      NotFoundError: (error): Effect.Effect<void, never, Console> =>
-        Console.log(`Error: Prompt not found with id: ${error.id}`),
-      IOError: (error): Effect.Effect<void, never, Console> => Console.log(`Error: ${error.reason}`)
+      NotFoundError: (error) => log(`Error: Prompt not found with id: ${error.id}`),
+      IOError: (error) => log(`Error: ${error.reason}`)
     })
   )
 
-  const run: Effect.Effect<void, never, Logger<unknown, void> | Console> = Effect.gen(function* () {
+  const run: Effect.Effect<void, never, Terminal.Terminal | Terminal.Key> = Effect.gen(function* () {
     let running = true
 
     while (running) {
@@ -123,7 +120,7 @@ const makeCliService = (promptService: PromptService): CliService => {
         .with(MenuActions.DELETE, () => deletePrompt)
         .with(MenuActions.EXIT, () => {
           running = false
-          return Console.log("Goodbye!")
+          return log("Goodbye!")
         })
         .exhaustive()
     }

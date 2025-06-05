@@ -12,11 +12,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-    "@types/bun": "^1.2.15"
-  },
-  "peerDependencies": {
-    "typescript": "^5.8.3",
-    "effect": "^3.0.0"
+    "@types/bun": "^1.2.15",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "@effect/platform": "^0.84.6",
