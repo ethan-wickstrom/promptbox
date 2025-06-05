@@ -1,6 +1,9 @@
 # Project Instructions
 
-This project is built with **Bun** (a fast JavaScript/TypeScript runtime) and **Effect v3** (TypeScript’s functional effect system). Effect v3 provides a **powerful standard library** for managing async code, errors, concurrency, resource safety, and dependency injection in a purely functional style. The codebase uses **Effect 3.16** (or higher), meaning all APIs and patterns follow the latest stable release. This document serves as a guide for OpenAI Codex (and other AI coding agents) to navigate and contribute to the codebase effectively, with **idiomatic Effect v3** usage and full Bun integration.
+> [!IMPORTANT]:
+> You MUST read the entire AGENTS.md file before beginning any work.
+
+This project is built with **Bun** (a fast JavaScript/TypeScript runtime) and **Effect v3** (TypeScript’s functional effect system). Effect v3 provides a **powerful standard library** for managing async code, errors, concurrency, resource safety, and dependency injection in a purely functional style. The codebase uses **Effect 3.16** (or higher), meaning all APIs and patterns follow the latest stable release. This document serves as a guide for AI agents and humans to navigate and contribute to the codebase effectively, with **idiomatic Effect v3** usage and full Bun integration.
 
 **Key points about the stack:**
 
@@ -18,7 +21,7 @@ This project is built with **Bun** (a fast JavaScript/TypeScript runtime) and **
   - **Effect Schema** – A full runtime type/schema system for validation and serialization. We use Schema to validate external input at boundaries, ensuring runtime type safety (e.g., parsing config or HTTP request data).
   - **Streaming** – The `Stream` module provides asynchronous streams with backpressure, integrated with Effect for processing large or infinite data streams safely and concurrently.
 
-This guide will detail how these patterns are used in the project and how to follow them when writing code. All examples and instructions here prioritize **pragmatism and correctness** in Effect v3, so the AI agent can confidently implement features that compile, pass tests, and run reliably.
+This guide will detail how these patterns are used in the project and how to follow them when writing code. All examples and instructions here prioritize **pragmatism and correctness** in Effect v3, so you can confidently implement features that compile, pass tests, and run reliably.
 
 ## Project Structure & Design
 
@@ -370,7 +373,7 @@ To maintain consistency and harness Effect’s advantages, keep in mind:
 
 - **Logging and Tracing:** The project uses Effect’s built-in logging. The default logger (`Logger` service) is provided by the runtime (printing to console with log level control). Use `Effect.log`, `Effect.logInfo`, `Effect.logError`, etc., to produce logs within effects – these respect the log level and attach fiber context (like fiber id, timestamp) automatically. Avoid using `console.log` directly; instead import `Console` from `"effect"` and use `Console.log` which returns an Effect you can compose. For example: `yield* $(Console.log("Starting process"))` inside a gen. If you need structured logs or to attach contextual data, use `Effect.addLogger` or consider `Effect.logSpan` for tracing spans. _Codex:_ When adding logging, ensure it’s done in the effect context (so it can be captured/filtered by the logging service).
 
-- **Metrics:** If the codebase uses Effect’s Metrics (check for any `Metrics.counter`, etc.), follow the established pattern (usually creating a Metric at module load and updating it via `Effect.metricIncrement` in code). The AGENT should update metrics in tandem with new features if relevant (e.g., increment a counter when a certain event happens).
+- **Metrics:** If the codebase uses Effect’s Metrics (check for any `Metrics.counter`, etc.), follow the established pattern (usually creating a Metric at module load and updating it via `Effect.metricIncrement` in code). The agent should update metrics in tandem with new features if relevant (e.g., increment a counter when a certain event happens).
 
 - **Testing utilities:** Use `TestClock` if writing tests for time-dependent logic (it allows manual advancing of time). Use `Effect.provide` to inject test versions of services (e.g., a stub Layer) to isolate behavior. There is a `DefaultServices` layer which provides things like live Clock, Console, Random, etc.. In tests, you can override any of these with deterministic versions (e.g., `Layer.succeed(Random, { next: Effect.succeed(0.5) })` to fix randomness). Many Effect test patterns involve providing a combination of `DefaultServices` and overrides.
 
@@ -451,11 +454,11 @@ To help the Codex agent operate effectively on this repository, here’s a step-
 
 **Important:** Always keep the **Effect semantics** in mind. For example, if adding a new feature that calls an external API, do it through a service interface so it can be mocked in tests (don’t embed a fetch call deep inside a pure function without making it an Effect). If modifying a layer, ensure any new resource is properly released in that layer’s scope.
 
-By following these steps, the AI agent will maintain the project’s integrity and produce reliable, idiomatic code. The emphasis is on type-safe, effectful implementations with comprehensive error handling and test coverage, which aligns with both Effect’s philosophy and robust software engineering practices.
+By following these steps, you will maintain the project’s integrity and produce reliable, idiomatic code. The emphasis is on type-safe, effectful implementations with comprehensive error handling and test coverage, which aligns with both Effect’s philosophy and robust software engineering practices.
 
 ## Example: End-to-End Feature Addition
 
-To illustrate how an AI agent should approach a real task, consider an example: _“Implement a new caching service to memoize results of an expensive computation, with a configurable TTL (time-to-live) for cache entries.”_
+To illustrate how you should approach a real task, consider an example: _“Implement a new caching service to memoize results of an expensive computation, with a configurable TTL (time-to-live) for cache entries.”_
 
 **Step 1: Plan** – We decide to create a new service `CacheService` with operations `get(key)` and `set(key, value)`. It will require a clock (for TTL) and run in-memory for simplicity. We also add a config for the TTL duration.
 
@@ -617,14 +620,14 @@ it('caches values and respects TTL', async () => {
 });
 ```
 
-This example shows how an agent should implement a feature following our patterns: a new service with a Context tag, a Layer to provide it, usage of Effect APIs (`Ref`, `Option`, `Effect.sleep` for test delays), and injection of the layer in tests and main. Throughout, we ensure:
+This example shows how you should implement a feature following our patterns: a new service with a Context tag, a Layer to provide it, usage of Effect APIs (`Ref`, `Option`, `Effect.sleep` for test delays), and injection of the layer in tests and main. Throughout, we ensure:
 
 - No global state (cache is in a Ref, within the layer scope).
 - Proper typing (e.g., `cache.get<string>` returns `Effect<never, never, Option<string>>`).
 - Errors: in this cache example, we didn’t have failing conditions; if we did (like if setting could fail), we’d model that.
 - Test uses the provided layer to isolate the CacheService.
 
-## Conclusion
+## Guidelines & Reference
 
 Adhere to these guidelines.
 
@@ -635,3 +638,141 @@ Maintain the codebase effectively by doing the following:
 - Ensure all code remains **pure, type-safe, and composable**, leveraging the full power of Effect v3’s runtime.
 
 Use this document as a reference for how to structure code changes, how to run and verify code (always run `bun test` after changes), and how to phrase solutions in terms of Effect’s abstractions. By following the established architecture and practices here, the AI will produce solutions that integrate seamlessly, are easier to review, and are less likely to introduce bugs or regressions.
+
+### Effect Documentation for LLMs
+
+> Effect is a powerful TypeScript library designed to help developers easily create complex, synchronous, and asynchronous programs.
+
+### Find Docs for Effect
+
+- [Batching](https://effect.website/docs/batching/): Optimize performance by batching requests and reducing redundant API calls, enhancing efficiency in data fetching and processing.
+- [Configuration](https://effect.website/docs/configuration/): Efficiently manage application configurations with built-in types, flexible providers, and advanced features like defaults, validation, and redaction.
+- [Introduction to Runtime](https://effect.website/docs/runtime/): Learn how Effect's runtime system executes concurrent programs, manages resources, and handles configuration with flexibility and efficiency.
+- [API Reference](https://effect.website/docs/additional-resources/api-reference/): API docs covering tools, integrations, and functional programming features.
+- [Coming From ZIO](https://effect.website/docs/additional-resources/coming-from-zio/): Key differences between Effect and ZIO.
+- [Effect vs fp-ts](https://effect.website/docs/additional-resources/effect-vs-fp-ts/): Comparison of Effect and fp-ts, covering features like typed services, resource management, concurrency, and stream processing.
+- [Effect vs Promise](https://effect.website/docs/additional-resources/effect-vs-promise/): Comparison of Effect and Promise, covering features like type safety, concurrency, and error handling.
+- [Myths About Effect](https://effect.website/docs/additional-resources/myths/): Debunking common misconceptions about Effect's performance, complexity, and use cases.
+- [Getting Started](https://effect.website/docs/ai/getting-started/): Learn how to use Effect's AI integration packages to define LLM interactions
+- [Introduction to Effect AI](https://effect.website/docs/ai/introduction/): Introduction to Effect's AI integrations, a set of packages for interacting with large language models
+- [Execution Planning](https://effect.website/docs/ai/planning-llm-interactions/): Learn how to create structured execution plans for your LLM interactions
+- [Tool Use](https://effect.website/docs/ai/tool-use/): Equip your LLM interactions with the ability to use tools to perform specific actions
+- [Equivalence](https://effect.website/docs/behaviour/equivalence/): Define and customize equivalence relations for TypeScript values.
+- [Order](https://effect.website/docs/behaviour/order/): Compare, sort, and manage value ordering with customizable tools for TypeScript.
+- [Cache](https://effect.website/docs/caching/cache/): Optimize performance with cache for concurrent, compositional, and efficient value retrieval.
+- [Caching Effects](https://effect.website/docs/caching/caching-effects/): Efficiently manage caching and memoization of effects with reusable tools.
+- [Branded Types](https://effect.website/docs/code-style/branded-types/): Use branded types to enforce type safety and refine data in TypeScript.
+- [Simplifying Excessive Nesting](https://effect.website/docs/code-style/do/): Simplify nested code with Do simulation and generators.
+- [Dual APIs](https://effect.website/docs/code-style/dual/): Explore data-first and data-last variants of dual APIs in the Effect ecosystem.
+- [Guidelines](https://effect.website/docs/code-style/guidelines/): Best practices for running Effect applications and ensuring safe, explicit coding styles.
+- [Pattern Matching](https://effect.website/docs/code-style/pattern-matching/): Simplify complex branching with pattern matching using the Match module.
+- [Basic Concurrency](https://effect.website/docs/concurrency/basic-concurrency/): Manage and control effect execution with concurrency, interruptions, and racing.
+- [Deferred](https://effect.website/docs/concurrency/deferred/): Master asynchronous coordination with Deferred, a one-time variable for managing effect synchronization and communication.
+- [Fibers](https://effect.website/docs/concurrency/fibers/): Understand fibers in Effect, lightweight virtual threads enabling powerful concurrency, structured lifecycles, and efficient resource management for responsive applications.
+- [Latch](https://effect.website/docs/concurrency/latch/): A Latch synchronizes fibers by allowing them to wait until a specific event occurs, controlling access based on its open or closed state.
+- [PubSub](https://effect.website/docs/concurrency/pubsub/): Effortless message broadcasting and asynchronous communication with PubSub in Effect.
+- [Queue](https://effect.website/docs/concurrency/queue/): Learn how to use Effect's Queue for lightweight, type-safe, and asynchronous workflows with built-in back-pressure.
+- [Semaphore](https://effect.website/docs/concurrency/semaphore/): Learn to use semaphores in Effect for precise control of concurrency, managing resource access, and coordinating asynchronous tasks effectively.
+- [Error Accumulation](https://effect.website/docs/error-management/error-accumulation/): Learn to manage errors effectively in Effect workflows with tools for sequential execution, error accumulation, and result partitioning.
+- [Error Channel Operations](https://effect.website/docs/error-management/error-channel-operations/): Explore operations on the error channel in Effect, including error mapping, filtering, inspecting, merging, and flipping channels.
+- [Expected Errors](https://effect.website/docs/error-management/expected-errors/): Learn how Effect manages expected errors with precise error tracking, short-circuiting, and powerful recovery techniques.
+- [Fallback](https://effect.website/docs/error-management/fallback/): Learn techniques to handle failures and implement fallback mechanisms in Effect programs.
+- [Matching](https://effect.website/docs/error-management/matching/): Learn to handle success and failure cases in Effect programs with tools for pattern matching, value ignoring, side effects, and precise failure analysis.
+- [Parallel and Sequential Errors](https://effect.website/docs/error-management/parallel-and-sequential-errors/): Handle concurrent and sequential errors in Effect programs, capturing multiple failures and ensuring robust error management in concurrent and sequential workflows.
+- [Retrying](https://effect.website/docs/error-management/retrying/): Enhance resilience with Effect's retrying strategies, enabling robust handling of transient failures with customizable retry policies and fallback mechanisms.
+- [Sandboxing](https://effect.website/docs/error-management/sandboxing/): Master error handling in Effect with sandboxing, enabling detailed inspection and recovery from failures, defects, and interruptions.
+- [Two Types of Errors](https://effect.website/docs/error-management/two-error-types/): Learn how Effect differentiates between expected and unexpected errors to enhance error tracking and recovery.
+- [Timing Out](https://effect.website/docs/error-management/timing-out/): Set time limits on operations with Effect, ensuring tasks complete within specified durations and customizing behavior for timeouts.
+- [Unexpected Errors](https://effect.website/docs/error-management/unexpected-errors/): Understand how Effect handles unexpected errors with tools to manage defects, terminate execution, and selectively recover from critical failures.
+- [Yieldable Errors](https://effect.website/docs/error-management/yieldable-errors/): Explore yieldable errors in Effect programming for seamless error handling in generator functions using custom and tagged error constructors.
+- [Building Pipelines](https://effect.website/docs/getting-started/building-pipelines/): Learn to create modular, readable pipelines for composing and sequencing operations in Effect, enabling clear and efficient data transformations.
+- [Control Flow Operators](https://effect.website/docs/getting-started/control-flow/): Learn to control execution flow in Effect programs using advanced constructs for conditional branching, iteration, and combining effects seamlessly.
+- [Create Effect App](https://effect.website/docs/getting-started/create-effect-app/): Quickly set up a new Effect application with a customizable template or example, streamlining your development start.
+- [Creating Effects](https://effect.website/docs/getting-started/creating-effects/): Learn to create and manage effects for structured handling of success, failure, and side effects in synchronous and asynchronous workflows.
+- [Importing Effect](https://effect.website/docs/getting-started/importing-effect/): Get started with Effect by installing the package and importing essential modules and functions for building type-safe, modular applications.
+- [Installation](https://effect.website/docs/getting-started/installation/): Set up a new Effect project across different platforms like Node.js, Deno, Bun, and Vite + React with step-by-step installation guides.
+- [Introduction](https://effect.website/docs/getting-started/introduction/): Explore Effect, a TypeScript library for building scalable, maintainable, and type-safe applications with advanced concurrency, error handling, and resource management.
+- [Running Effects](https://effect.website/docs/getting-started/running-effects/): Learn how to execute effects in Effect with various functions for synchronous and asynchronous execution, including handling results and managing error outcomes.
+- [The Effect Type](https://effect.website/docs/getting-started/the-effect-type/): Understand the Effect type in the Effect ecosystem, which models immutable, lazy workflows with type-safe success, error, and requirement handling for effectful computations.
+- [Using Generators](https://effect.website/docs/getting-started/using-generators/): Learn how to use generators in Effect for writing effectful code, enhancing control flow, handling errors, and simplifying asynchronous operations with a syntax similar to async/await.
+- [Why Effect?](https://effect.website/docs/getting-started/why-effect/): Discover how Effect transforms TypeScript programming by using the type system to track errors, context, and success, offering practical solutions for building reliable, maintainable applications.
+- [BigDecimal](https://effect.website/docs/data-types/bigdecimal/): The BigDecimal data type represents arbitrary-precision decimal numbers.
+- [Cause](https://effect.website/docs/data-types/cause/): Comprehensive error analysis with Cause in Effect - track failures, defects, and interruptions with precise details.
+- [Chunk](https://effect.website/docs/data-types/chunk/): Learn about Chunk, a high-performance immutable data structure in Effect, offering efficient operations like concatenation, slicing, and conversions.
+- [Data](https://effect.website/docs/data-types/data/): Define immutable data structures, ensure equality, and manage errors seamlessly with Effect's Data module.
+- [Duration](https://effect.website/docs/data-types/duration/): Work with precise time spans using Effect's Duration, supporting creation, comparison, and arithmetic operations for efficient time handling.
+- [DateTime](https://effect.website/docs/data-types/datetime/): Work with precise points in time using Effect's DateTime, supporting creation, comparison, and arithmetic operations for efficient time handling.
+- [Either](https://effect.website/docs/data-types/either/): Represent exclusive values as Left or Right with the Either data type, enabling precise control flow in computations.
+- [Exit](https://effect.website/docs/data-types/exit/): Represent the result of an Effect workflow with Exit, capturing success values or failure causes.
+- [HashSet](https://effect.website/docs/data-types/hash-set/): Learn about HashSet data structures - both immutable and mutable variants.
+- [Option](https://effect.website/docs/data-types/option/): Represent optional values with Option, supporting presence (Some) or absence (None) and seamless operations like mapping, combining, and pattern matching.
+- [Redacted](https://effect.website/docs/data-types/redacted/): Securely handle sensitive data with the Redacted module, preventing accidental exposure in logs while supporting safe value access and comparison.
+- [Micro for Effect Users](https://effect.website/docs/micro/effect-users/): Learn about the Micro module, a lightweight alternative to Effect for reducing bundle size while maintaining compatibility and functionality for TypeScript applications.
+- [Logging](https://effect.website/docs/observability/logging/): Discover Effect's logging utilities for dynamic log levels, custom outputs, and fine-grained control over logs.
+- [Getting Started with Micro](https://effect.website/docs/micro/new-users/): Learn how to get started with the Micro module, a lightweight alternative to Effect for reducing bundle size while maintaining essential functionality in TypeScript applications.
+- [Metrics in Effect](https://effect.website/docs/observability/metrics/): Effect Metrics provides powerful monitoring tools, including counters, gauges, histograms, summaries, and frequencies, to track your application's performance and behavior.
+- [Supervisor](https://effect.website/docs/observability/supervisor/): Effect's Supervisor manages fiber lifecycles, enabling tracking, monitoring, and controlling fibers' behavior within an application.
+- [Tracing in Effect](https://effect.website/docs/observability/tracing/): Explore tracing in distributed systems to track request lifecycles across services using spans and traces for debugging and performance optimization.
+- [Command](https://effect.website/docs/platform/command/): Learn how to create, run, and manage commands with custom arguments, environment variables, and input/output handling in Effect.
+- [FileSystem](https://effect.website/docs/platform/file-system/): Explore file system operations for reading, writing, and managing files and directories in Effect.
+- [Introduction to Effect Platform](https://effect.website/docs/platform/introduction/): Build cross-platform applications with unified abstractions for Node.js, Deno, Bun, and browsers using @effect/platform.
+- [KeyValueStore](https://effect.website/docs/platform/key-value-store/): Manage key-value pairs with asynchronous, consistent storage, supporting in-memory, file system, and schema-based implementations.
+- [Path](https://effect.website/docs/platform/path/): Perform file path operations such as joining, resolving, and normalizing across platforms.
+- [PlatformLogger](https://effect.website/docs/platform/platformlogger/): Log messages to a file using the FileSystem APIs.
+- [Runtime](https://effect.website/docs/platform/runtime/): Run your program with built-in error handling and logging.
+- [Terminal](https://effect.website/docs/platform/terminal/): Interact with standard input and output to read user input and display messages on the terminal.
+- [Default Services](https://effect.website/docs/requirements-management/default-services/): Learn about the default services in Effect, including Clock, Console, Random, ConfigProvider, and Tracer, and how they are automatically provided for your programs.
+- [Layer Memoization](https://effect.website/docs/requirements-management/layer-memoization/): Learn how layer memoization optimizes performance in Effect by reusing layers and controlling their instantiation.
+- [Managing Layers](https://effect.website/docs/requirements-management/layers/): Learn how to use layers in Effect to manage service dependencies and build efficient, clean dependency graphs for your applications.
+- [Managing Services](https://effect.website/docs/requirements-management/services/): Learn how to manage reusable services in Effect, handle dependencies efficiently, and ensure clean, decoupled architecture in your applications.
+- [Introduction](https://effect.website/docs/resource-management/introduction/): Common patterns for safe resource management
+- [Scope](https://effect.website/docs/resource-management/scope/): Learn how Effect simplifies resource management with Scopes, ensuring efficient cleanup and safe resource handling in long-running applications.
+- [Built-In Schedules](https://effect.website/docs/scheduling/built-in-schedules/): Explore built-in scheduling patterns in Effect for efficient timed repetitions and delays.
+- [Cron](https://effect.website/docs/scheduling/cron/): Explore cron scheduling in Effect for executing actions at specific times and intervals.
+- [Examples](https://effect.website/docs/scheduling/examples/): Explore practical examples for scheduling, retries, timeouts, and periodic task execution in Effect.
+- [Introduction](https://effect.website/docs/scheduling/introduction/): Learn the fundamentals of scheduling in Effect, including composable recurrence patterns and handling retries and repetitions.
+- [Repetition](https://effect.website/docs/scheduling/repetition/): Explore repetition in Effect for executing actions multiple times with control over retries, failures, and conditions.
+- [Schedule Combinators](https://effect.website/docs/scheduling/schedule-combinators/): Learn how to combine and customize schedules in Effect to create complex recurrence patterns, including union, intersection, sequencing, and more.
+- [Advanced Usage](https://effect.website/docs/schema/advanced-usage/): Learn advanced techniques for defining and extending data schemas, including recursive and mutually recursive types, optional fields, branded types, and schema transformations.
+- [Schema Annotations](https://effect.website/docs/schema/annotations/): Learn how to enhance schemas with annotations for better customization, error handling, documentation, and concurrency control in your Effect-based applications.
+- [Schema to Arbitrary](https://effect.website/docs/schema/arbitrary/): Generate random test data that adheres to schema constraints using Arbitrary, with options for transformations, filters, and custom generation.
+- [Basic Usage](https://effect.website/docs/schema/basic-usage/): Learn to define and work with basic schemas, including primitives, literals, unions, and structs, for effective data validation and transformation.
+- [Class APIs](https://effect.website/docs/schema/classes/): Learn to define and extend schemas using classes, incorporating validation, custom logic, and advanced features like equality checks and transformations.
+- [Default Constructors](https://effect.website/docs/schema/default-constructors/): Create values that conform to schemas effortlessly using default constructors for structs, records, filters, and branded types, with options for validation, default values, and lazy evaluation.
+- [Effect Data Types](https://effect.website/docs/schema/effect-data-types/): Transform and manage various data types with schemas for enhanced JSON serialization, including support for options, eithers, sets, maps, durations, and sensitive redacted data.
+- [Schema to Equivalence](https://effect.website/docs/schema/equivalence/): Generate and customize equivalence checks for data structures based on schema definitions.
+- [Error Formatters](https://effect.website/docs/schema/error-formatters/): Format and customize error messages during schema decoding and encoding using TreeFormatter or ArrayFormatter.
+- [Error Messages](https://effect.website/docs/schema/error-messages/): Customize and enhance error messages for schema decoding with default, refined, and custom messages.
+- [Filters](https://effect.website/docs/schema/filters/): Define custom validation logic with filters to enhance data validation beyond basic type checks.
+- [Introduction to Effect Schema](https://effect.website/docs/schema/introduction/): Introduction to `effect/Schema`, a module for defining, validating, and transforming data schemas.
+- [Getting Started](https://effect.website/docs/schema/getting-started/): Learn how to define schemas, extract types, and handle decoding and encoding.
+- [Schema to JSON Schema](https://effect.website/docs/schema/json-schema/): Convert schema definitions into JSON Schema for data validation and interoperability.
+- [Schema to Pretty Printer](https://effect.website/docs/schema/pretty/): Generate formatted string representations of values based on schemas.
+- [Schema Projections](https://effect.website/docs/schema/projections/): Create new schemas by extracting and customizing the Type or Encoded components of existing schemas.
+- [Schema to Standard Schema](https://effect.website/docs/schema/standard-schema/): Generate Standard Schema V1.
+- [Sink Concurrency](https://effect.website/docs/sink/concurrency/): undefined
+- [Schema Transformations](https://effect.website/docs/schema/transformations/): Transform and manipulate data with schema-based transformations, including type conversions, validations, and custom processing.
+- [Creating Sinks](https://effect.website/docs/sink/creating/): Discover how to create and use various sinks for processing streams, including counting, summing, collecting, folding, and handling success or failure.
+- [Introduction](https://effect.website/docs/sink/introduction/): Learn the role of Sink in stream processing, handling element consumption, error management, result production, and leftover elements.
+- [Leftovers](https://effect.website/docs/sink/leftovers/): Learn how to handle unconsumed elements in streams, collecting or ignoring leftovers for efficient data processing.
+- [Sink Operations](https://effect.website/docs/sink/operations/): Explore operations to transform, filter, and adapt sinks, enabling custom input-output handling and element filtering in stream processing.
+- [Ref](https://effect.website/docs/state-management/ref/): Learn how to manage state in concurrent applications using Effect's Ref data type. Master mutable references for safe, controlled state updates across fibers.
+- [SubscriptionRef](https://effect.website/docs/state-management/subscriptionref/): Learn how to manage shared state with SubscriptionRef in Effect, enabling multiple observers to subscribe to and react to state changes efficiently in concurrent environments.
+- [SynchronizedRef](https://effect.website/docs/state-management/synchronizedref/): Master concurrent state management with SynchronizedRef in Effect, a mutable reference that supports atomic, effectful updates to shared state in concurrent environments.
+- [Consuming Streams](https://effect.website/docs/stream/consuming-streams/): Learn techniques for consuming streams, including collecting elements, processing with callbacks, and using folds and sinks.
+- [Creating Streams](https://effect.website/docs/stream/creating/): Learn various methods for creating Effect streams, from basic constructors to handling asynchronous data sources, pagination, and schedules.
+- [Error Handling in Streams](https://effect.website/docs/stream/error-handling/): Learn how to handle errors in streams, ensuring robust recovery, retries, and graceful error management for reliable stream processing.
+- [Introduction to Streams](https://effect.website/docs/stream/introduction/): Learn the fundamentals of streams, a powerful tool for emitting multiple values, handling errors, and working with finite or infinite sequences in your applications.
+- [Operations](https://effect.website/docs/stream/operations/): Explore essential operations for manipulating and managing data in streams, including tapping, mapping, filtering, merging, and more, to effectively process and transform streaming data.
+- [Resourceful Streams](https://effect.website/docs/stream/resourceful-streams/): Learn how to manage resources in streams with safe acquisition and release, finalization for cleanup tasks, and ensuring post-finalization actions for robust resource handling in streaming applications.
+- [TestClock](https://effect.website/docs/testing/testclock/): Control time during testing with Effect's TestClock, simulating time passage, delays, and recurring effects without waiting for real time.
+- [Equal](https://effect.website/docs/trait/equal/): Implement value-based equality checks for improved data integrity and predictable behavior in TypeScript.
+- [Hash](https://effect.website/docs/trait/hash/): Optimize equality checks with efficient hashing for faster comparisons in collections like hash sets and maps.
+
+### API Reference
+
+- [API List](https://tim-smart.github.io/effect-io-ai/): A succint list of all functions and methods in Effect.
+
+## Notes
+
+- You MUST read the entire AGENTS.md file before beginning any work.
