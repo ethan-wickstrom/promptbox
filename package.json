@@ -1,11 +1,11 @@
 {
   "name": "promptbox",
-  "module": "src/cli.ts",
+  "module": "src/main-cli.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "cli": "bun run src/cli.ts",
-    "dev": "bun run src/server.ts",
+    "cli": "bun run src/main-cli.ts",
+    "dev": "bun run src/main-server.ts",
     "test": "bun test",
     "typecheck": "bun run tsc -p .",
     "lint": "bun x biome check --write"
