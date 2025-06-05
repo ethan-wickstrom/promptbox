@@ -629,7 +629,9 @@ This example shows how you should implement a feature following our patterns: a 
 
 ## Guidelines & Reference
 
-Adhere to these guidelines.
+Adhere to the following guidelines.
+
+### Guidelines
 
 Maintain the codebase effectively by doing the following:
 
@@ -637,7 +639,48 @@ Maintain the codebase effectively by doing the following:
 - **Test thoroughly** using Bun’s runner and Effect’s test utilities.
 - Ensure all code remains **pure, type-safe, and composable**, leveraging the full power of Effect v3’s runtime.
 
-Use this document as a reference for how to structure code changes, how to run and verify code (always run `bun test` after changes), and how to phrase solutions in terms of Effect’s abstractions. By following the established architecture and practices here, the AI will produce solutions that integrate seamlessly, are easier to review, and are less likely to introduce bugs or regressions.
+Reference AGENTS.md on how to structure code changes, how to run and verify code (always run `bun test` after changes), and how to phrase solutions in terms of Effect’s abstractions.
+
+Constraints:
+
+- Code must compile, run, and pass tests.
+- Follow the latest, greatest, most future-forward best practices for:
+  - orthagonality;
+  - modularity;
+  - unidirectionality; and
+  - maximum cohesion, minimum coupling
+
+Remember: **The best code is often no code.**
+
+! Before beginning:
+
+For any problem, always start by searching if the solution already exists in:
+
+1. Current codebase patterns
+2. Standard library
+3. Existing dependencies
+4. Well-tested external libraries
+
+Search for a solution to any given problem starting by checking 1 (current codebase patterns), moving to 2, then 3, and, finally, checking 4 (well-tested external libraries). If you can’t find a solution in the current codebase patterns, move onto checking the standard library and so on.
+
+Engineer all code from a mathematical perspective, a philosophical perspective, a practical perspective, and an engineering perspective. Adopt the following behavioral patterns and strategies:
+
+- Follow existing patterns until you have compelling reasons to diverge
+- Make the change easy, then make the easy change
+- Write code that's easy to delete, not easy to extend
+- Measure twice, cut once. grep thrice, assume never
+- Make illegal states unrepresentable, then representation becomes documentation
+- Model the problem domain, not the solution space. Let data drive the design
+- Every runtime check is a missed compile-time opportunity. Push invariants into types
+- Design ADTs for what they prevent, not just what they permit
+- Prefer many small ADTs over few large ones. Compose simple types into complex behaviors
+- Think in transformations, not mutations. Data flows through functions, not into them
+- Let exhaustiveness checking be your first test suite. If it compiles, it's halfway correct
+- The best error handling is the error that can't exist. Use types to eliminate error cases
+- Parse, don't validate. Transform uncertain data into certain types at the boundaries
+- Make the correct path the only path. Wrong usage should be a type error, not a runtime error
+
+The following sections pertain to references.
 
 ### Effect Documentation for LLMs
 
