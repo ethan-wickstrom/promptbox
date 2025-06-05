@@ -1,19 +1,16 @@
 import { describe, expect, it } from "bun:test"
-import { TestKeyInput, TestTerminal } from "@effect/platform/test"
 import { Effect, Exit } from "effect"
+import { TestTerminal } from "../../test/test-terminal.ts"
 import { runMenu } from "./menu.ts"
 
-const arrowDown = { key: "down" }
-const enter = { key: "return" }
+const arrowDown = { name: "down", ctrl: false, meta: false, shift: false }
+const enter = { name: "return", ctrl: false, meta: false, shift: false }
 
 describe("runMenu", () => {
   it("returns selected index", async (): Promise<void> => {
     const program = runMenu(["a", "b", "c"])
     const exit = await Effect.runPromiseExit(
-      program.pipe(
-        Effect.provide(TestKeyInput.layer({ keys: [arrowDown, arrowDown, enter] })),
-        Effect.provide(TestTerminal.layer({}))
-      )
+      program.pipe(Effect.provide(TestTerminal.layer({ keys: [arrowDown, arrowDown, enter] })))
     )
     expect(Exit.isSuccess(exit)).toBe(true)
     if (Exit.isSuccess(exit)) {

@@ -1,4 +1,4 @@
-import { BunKeyInput, BunRuntime, BunTerminal } from "@effect/platform-bun"
+import { BunTerminal } from "@effect/platform-bun"
 import { Effect, Layer, LogLevel, Logger } from "effect"
 import { CliService, CliServiceLive } from "./services/cli/index"
 import { ConfigServiceLive } from "./services/config.ts"
@@ -12,7 +12,6 @@ const MainLive = Layer.mergeAll(
   PromptServiceLive,
   CliServiceLive,
   BunTerminal.layer,
-  BunKeyInput.layer,
   Logger.minimumLogLevel(LogLevel.All)
 )
 
@@ -20,9 +19,6 @@ const MainLive = Layer.mergeAll(
 const program = Effect.gen(function* () {
   const cli = yield* CliService
   yield* cli.run
-}).pipe(Effect.provide(MainLive), Effect.tapErrorCause(Effect.logError))
+}).pipe(Effect.tapErrorCause(Effect.logError))
 
-// Run the program with proper resource management
-if (import.meta.main) {
-  BunRuntime.runMain(program)
-}
+export { MainLive, program }

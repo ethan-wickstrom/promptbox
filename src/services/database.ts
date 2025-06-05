@@ -96,7 +96,7 @@ const makeConnection = (dbPath: string): Effect.Effect<DbConnection, ConnectionE
 
         exec: (query: string): Effect.Effect<void, QueryError> =>
           Effect.try({
-            try: () => {
+            try: (): void => {
               db.exec(query)
             },
             catch: (error: unknown): QueryError => new QueryError({ query, reason: String(error) })
@@ -123,7 +123,11 @@ const makeDatabaseService = (dbPath: string): DatabaseService => {
         Effect.catchTag(
           "ConnectionError",
           (error): Effect.Effect<never, DatabaseError> =>
-            Effect.fail(new DatabaseError({ reason: `Database connection failed: ${error.reason}` }))
+            Effect.fail(
+              new DatabaseError({
+                reason: `Database connection failed: ${"reason" in error ? error.reason : "unknown"}`
+              })
+            )
         )
       )
     )
@@ -168,10 +172,4 @@ export const DatabaseServiceLive = Layer.effect(
 )
 
 // Test layer with in-memory database
-export const DatabaseServiceTest = Layer.succeed(
-  DatabaseService,
-  (() => {
-    const service = makeDatabaseService(":memory:")
-    return service
-  })()
-)
+export const DatabaseServiceTest = Layer.succeed(DatabaseService, makeDatabaseService(":memory:"))
