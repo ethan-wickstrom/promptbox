@@ -19,5 +19,6 @@
     "noUnusedParameters": true,
     "noPropertyAccessFromIndexSignature": true,
     "types": ["bun-types"]
-  }
+  },
+  "include": ["src/**/*"]
 }

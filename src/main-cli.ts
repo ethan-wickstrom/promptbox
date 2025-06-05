@@ -1,6 +1,6 @@
-import { BunTerminal } from "@effect/platform-bun"
+import { BunRuntime, BunTerminal } from "@effect/platform-bun"
 import { Effect, Layer, LogLevel, Logger } from "effect"
-import { CliService, CliServiceLive } from "./services/cli/index"
+import { CliService, CliServiceLive } from "./services/cli/index.ts"
 import { ConfigServiceLive } from "./services/config.ts"
 import { DatabaseServiceLive } from "./services/database.ts"
 import { PromptServiceLive } from "./services/prompt.ts"
@@ -19,6 +19,7 @@ const MainLive = Layer.mergeAll(
 const program = Effect.gen(function* () {
   const cli = yield* CliService
   yield* cli.run
-}).pipe(Effect.tapErrorCause(Effect.logError))
+}).pipe(Effect.scoped, Effect.tapErrorCause(Effect.logError))
 
-export { MainLive, program }
+// Run with proper teardown handling
+BunRuntime.runMain(Effect.provide(program, MainLive))

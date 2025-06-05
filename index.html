@@ -18,12 +18,27 @@
     const list = document.getElementById('list');
     const form = document.getElementById('add');
 
+    window.viewPrompt = async (id) => {
+      try {
+        const res = await fetch(`/api/prompts/${id}`);
+        if (!res.ok) {
+          const error = await res.json();
+          alert(error.error || 'Failed to load prompt');
+          return;
+        }
+        const prompt = await res.json();
+        alert(`Name: ${prompt.name}\n\nContent: ${prompt.content}`);
+      } catch (error) {
+        alert('Failed to load prompt: ' + error.message);
+      }
+    };
+
     async function load() {
       const res = await fetch('/api/prompts');
       const prompts = await res.json();
       list.innerHTML = prompts
         .map(
-          p => `<li class="flex justify-between"><a class="text-blue-600" href="/prompt/${p.id}">${p.name}</a><button data-id="${p.id}" class="text-red-600 delete">Delete</button></li>`,
+          p => `<li class="flex justify-between"><span class="text-blue-600 cursor-pointer" onclick="viewPrompt('${p.id}')">${p.name}</span><button data-id="${p.id}" class="text-red-600 delete">Delete</button></li>`,
         )
         .join('');
     }
@@ -33,8 +48,17 @@
       if (target instanceof HTMLElement && target.classList.contains('delete')) {
         const id = target.dataset.id;
         if (!id) return;
-        await fetch('/api/prompts/' + id, { method: 'DELETE' });
-        load();
+        try {
+          const res = await fetch('/api/prompts/' + id, { method: 'DELETE' });
+          if (!res.ok && res.status !== 204) {
+            const error = await res.json();
+            alert(error.error || 'Failed to delete prompt');
+            return;
+          }
+          load();
+        } catch (error) {
+          alert('Failed to delete prompt: ' + error.message);
+        }
       }
     });
 
@@ -42,14 +66,23 @@
       e.preventDefault();
       const name = document.getElementById('name').value;
       const content = document.getElementById('content').value;
-      await fetch('/api/prompts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, content }),
-      });
-      document.getElementById('name').value = '';
-      document.getElementById('content').value = '';
-      load();
+      try {
+        const res = await fetch('/api/prompts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, content }),
+        });
+        if (!res.ok) {
+          const error = await res.json();
+          alert(error.error || 'Failed to create prompt');
+          return;
+        }
+        document.getElementById('name').value = '';
+        document.getElementById('content').value = '';
+        load();
+      } catch (error) {
+        alert('Failed to create prompt: ' + error.message);
+      }
     });
 
     load();

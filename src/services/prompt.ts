@@ -1,5 +1,5 @@
 import type { Changes } from "bun:sqlite"
-import { Schema, TreeFormatter } from "@effect/schema"
+import { ArrayFormatter, Schema } from "@effect/schema"
 import { Context, Effect, Layer, pipe } from "effect"
 import { NotFoundError, ValidationError } from "../errors.ts"
 import type { Prompt } from "../types.ts"
@@ -41,7 +41,9 @@ const makePromptService = (database: DatabaseService): PromptService => {
         (error) =>
           new ValidationError({
             field: "input",
-            reason: TreeFormatter.formatErrorSync(error)
+            reason: ArrayFormatter.formatErrorSync(error)
+              .map((issue) => issue.message)
+              .join(", ")
           })
       )
     )
@@ -162,7 +164,9 @@ export const PromptServiceTest = Layer.succeed(
               (error) =>
                 new ValidationError({
                   field: "input",
-                  reason: TreeFormatter.formatErrorSync(error)
+                  reason: ArrayFormatter.formatErrorSync(error)
+                    .map((issue) => issue.message)
+                    .join(", ")
                 })
             )
           )
@@ -188,7 +192,9 @@ export const PromptServiceTest = Layer.succeed(
               (error) =>
                 new ValidationError({
                   field: "input",
-                  reason: TreeFormatter.formatErrorSync(error)
+                  reason: ArrayFormatter.formatErrorSync(error)
+                    .map((issue) => issue.message)
+                    .join(", ")
                 })
             )
           )

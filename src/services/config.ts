@@ -7,6 +7,7 @@ export type ConfigService = {
   readonly dataDir: string
   readonly port: number
   readonly host: string
+  readonly rootDir: string
 }
 
 // Context.Tag for dependency injection
@@ -22,6 +23,17 @@ const config = Config.all({
   host: hostConfig
 })
 
+// Get current working directory
+const getCwd = (): string => {
+  // Use Bun's directory if available
+  try {
+    return import.meta.dir
+  } catch {
+    // Fallback for non-Bun environments
+    return "."
+  }
+}
+
 // Layer implementation
 export const ConfigServiceLive = Layer.effect(
   ConfigService,
@@ -29,7 +41,7 @@ export const ConfigServiceLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const conf = yield* config
     yield* fs.makeDirectory(conf.dataDir, { recursive: true })
-    return conf
+    return { ...conf, rootDir: getCwd() }
   })
 ).pipe(Layer.mapError((error) => new ConfigError({ key: "config", reason: String(error) })))
 
@@ -39,6 +51,7 @@ export const ConfigServiceTest = Layer.succeed(
   ConfigService.of({
     dataDir: "test-data",
     port: 3001,
-    host: "localhost"
+    host: "localhost",
+    rootDir: "test-root-dir"
   })
 )

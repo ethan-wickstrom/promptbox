@@ -1,21 +1,18 @@
-import { Console, Effect, Layer } from "effect"
-import { ConfigService, ConfigServiceLive } from "./services/config.ts"
+import { BunRuntime } from "@effect/platform-bun"
+import { Effect, Layer } from "effect"
+import { ConfigServiceLive } from "./services/config.ts"
 import { DatabaseServiceLive } from "./services/database.ts"
-import { startServer } from "./services/http.ts"
-import { PromptService, PromptServiceLive } from "./services/prompt.ts"
+import { HttpServerService, HttpServerServiceLive } from "./services/http/index.ts"
+import { PromptServiceLive } from "./services/prompt.ts"
 
 // Compose all layers for the HTTP server
-const MainLive = Layer.mergeAll(ConfigServiceLive, DatabaseServiceLive, PromptServiceLive)
+const MainLive = Layer.mergeAll(ConfigServiceLive, DatabaseServiceLive, PromptServiceLive, HttpServerServiceLive)
 
 // Main program
 const program = Effect.gen(function* () {
-  const config = yield* ConfigService
-  const promptService = yield* PromptService
-  yield* Console.log(`Server running at http://${config.host}:${config.port}`)
-  yield* startServer(promptService, config)
-  yield* Effect.never
-}).pipe(Effect.tapErrorCause(Effect.logError))
+  const httpServer = yield* HttpServerService
+  yield* httpServer.start
+}).pipe(Effect.scoped, Effect.tapErrorCause(Effect.logError))
 
-// Run the program with proper resource management and graceful shutdown
-
-export { MainLive, program }
+// Run with proper teardown handling
+BunRuntime.runMain(Effect.provide(program, MainLive))

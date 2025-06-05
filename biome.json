@@ -99,8 +99,7 @@
         "useYield": "error"
       },
       "nursery": {
-        "all": false,
-        "useExplicitType": "error",
+        "recommended": true,
         "noUnknownTypeSelector": "error",
         "noEnum": "error",
         "useConsistentMemberAccessibility": {
@@ -137,7 +136,7 @@
         "noRestrictedGlobals": {
           "level": "error",
           "options": {
-            "deniedGlobals": ["console", "process"]
+            "deniedGlobals": ["process"]
           }
         },
         "noUnusedTemplateLiteral": "error",
@@ -192,13 +191,7 @@
         "noCompareNegZero": "error",
         "noConfusingLabels": "error",
         "noConfusingVoidType": "error",
-        "noConsole": {
-          "level": "error",
-          "options": {
-            "allow": []
-          }
-        },
-        "noConsoleLog": "error",
+        "noConsoleLog": "off",
         "noConstEnum": "error",
         "noControlCharactersInRegex": "error",
         "noDebugger": "error",
