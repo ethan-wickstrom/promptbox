@@ -21,7 +21,7 @@ export type DbConnection = {
 export type DatabaseService = {
   readonly withConnection: <A, E, R>(
     use: (conn: DbConnection) => Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E | DatabaseError | ConnectionError, R>
+  ) => Effect.Effect<A, E | DatabaseError, R>
   readonly runMigrations: Effect.Effect<void, DatabaseError>
 }
 

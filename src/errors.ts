@@ -48,3 +48,5 @@ export class HttpError extends Data.TaggedError("HttpError")<{
   readonly statusCode: number
   readonly reason: string
 }> {}
+
+export type AllDatabaseErrors = DatabaseError | ConnectionError | QueryError | ConstraintError

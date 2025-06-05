@@ -1,23 +1,23 @@
 import type { Changes } from "bun:sqlite"
 import { ArrayFormatter, Schema } from "@effect/schema"
 import { Context, Effect, Layer, pipe } from "effect"
+import type { AllDatabaseErrors } from "../errors.ts"
 import { NotFoundError, ValidationError } from "../errors.ts"
-import type { Prompt } from "../types.ts"
+import type { Prompt } from "../schemas.ts"
+import { CreatePromptRequestSchema } from "../schemas.ts"
 import { DatabaseService } from "./database.ts"
-
-// Schema for prompt validation
-const PromptInputSchema = Schema.Struct({
-  name: Schema.NonEmptyString,
-  content: Schema.NonEmptyString
-})
 
 // Service type definition
 export type PromptService = {
-  readonly create: (name: string, content: string) => Effect.Effect<Prompt, ValidationError>
-  readonly getById: (id: string) => Effect.Effect<Prompt, NotFoundError>
-  readonly list: Effect.Effect<readonly Prompt[], never>
-  readonly update: (id: string, name: string, content: string) => Effect.Effect<Prompt, ValidationError | NotFoundError>
-  readonly delete: (id: string) => Effect.Effect<void, NotFoundError>
+  readonly create: (name: string, content: string) => Effect.Effect<Prompt, ValidationError | AllDatabaseErrors>
+  readonly getById: (id: string) => Effect.Effect<Prompt, NotFoundError | AllDatabaseErrors>
+  readonly list: Effect.Effect<readonly Prompt[], AllDatabaseErrors>
+  readonly update: (
+    id: string,
+    name: string,
+    content: string
+  ) => Effect.Effect<Prompt, ValidationError | NotFoundError | AllDatabaseErrors>
+  readonly delete: (id: string) => Effect.Effect<void, NotFoundError | AllDatabaseErrors>
 }
 
 // Context.Tag for dependency injection
@@ -36,7 +36,7 @@ const makePromptService = (database: DatabaseService): PromptService => {
     content: string
   ): Effect.Effect<{ name: string; content: string }, ValidationError> =>
     pipe(
-      Schema.decodeUnknown(PromptInputSchema)({ name, content }),
+      Schema.decodeUnknown(CreatePromptRequestSchema)({ name, content }),
       Effect.mapError(
         (error) =>
           new ValidationError({
@@ -48,10 +48,10 @@ const makePromptService = (database: DatabaseService): PromptService => {
       )
     )
 
-  const create = (name: string, content: string): Effect.Effect<Prompt, ValidationError> =>
+  const create = (name: string, content: string): Effect.Effect<Prompt, ValidationError | AllDatabaseErrors> =>
     pipe(
       validateInput(name, content),
-      Effect.andThen(() => {
+      Effect.flatMap(() => {
         const id = generateId()
         const prompt: Prompt = { id, name, content }
 
@@ -60,38 +60,32 @@ const makePromptService = (database: DatabaseService): PromptService => {
             .run("INSERT INTO prompts (id, name, content) VALUES (?, ?, ?)", [id, name, content])
             .pipe(Effect.as(prompt))
         )
-      }),
-      Effect.mapError((error) =>
-        error._tag === "ValidationError"
-          ? error
-          : new ValidationError({
-              field: "database",
-              reason: `Failed to create prompt: ${error._tag}`
-            })
+      })
+    )
+
+  const getById = (id: string): Effect.Effect<Prompt, NotFoundError | AllDatabaseErrors> =>
+    database.withConnection((conn) =>
+      pipe(
+        conn.all<Prompt>("SELECT id, name, content FROM prompts WHERE id = ?", [id]),
+        Effect.flatMap((rows) => {
+          const first = rows[0]
+          return first ? Effect.succeed(first) : Effect.fail(new NotFoundError({ type: "prompt", id }))
+        })
       )
     )
 
-  const getById = (id: string): Effect.Effect<Prompt, NotFoundError> =>
-    database
-      .withConnection((conn) =>
-        pipe(
-          conn.all<Prompt>("SELECT id, name, content FROM prompts WHERE id = ?", [id]),
-          Effect.flatMap((rows) => {
-            const [first] = rows
-            return first ? Effect.succeed(first) : Effect.fail(new NotFoundError({ type: "prompt", id }))
-          })
-        )
-      )
-      .pipe(Effect.catchAll(() => Effect.fail(new NotFoundError({ type: "prompt", id }))))
+  const list: Effect.Effect<readonly Prompt[], AllDatabaseErrors> = database.withConnection((conn) =>
+    conn.all<Prompt>("SELECT id, name, content FROM prompts ORDER BY created_at DESC")
+  )
 
-  const list: Effect.Effect<readonly Prompt[], never> = database
-    .withConnection((conn) => conn.all<Prompt>("SELECT id, name, content FROM prompts ORDER BY created_at DESC"))
-    .pipe(Effect.catchAll(() => Effect.succeed([])))
-
-  const update = (id: string, name: string, content: string): Effect.Effect<Prompt, ValidationError | NotFoundError> =>
+  const update = (
+    id: string,
+    name: string,
+    content: string
+  ): Effect.Effect<Prompt, ValidationError | NotFoundError | AllDatabaseErrors> =>
     pipe(
       validateInput(name, content),
-      Effect.andThen(() =>
+      Effect.flatMap(() =>
         database.withConnection((conn) =>
           pipe(
             conn.run("UPDATE prompts SET name = ?, content = ?, updated_at = unixepoch() WHERE id = ?", [
@@ -106,30 +100,19 @@ const makePromptService = (database: DatabaseService): PromptService => {
             )
           )
         )
-      ),
-      Effect.mapError((error) => {
-        if (error._tag === "ValidationError" || error._tag === "NotFoundError") {
-          return error
-        }
-        return new ValidationError({
-          field: "database",
-          reason: `Failed to update prompt: ${error._tag}`
-        })
-      })
+      )
     )
 
-  const deletePrompt = (id: string): Effect.Effect<void, NotFoundError> =>
-    database
-      .withConnection((conn) =>
-        pipe(
-          conn.run("DELETE FROM prompts WHERE id = ?", [id]),
-          Effect.flatMap(
-            (result: Changes): Effect.Effect<void, NotFoundError> =>
-              result.changes === 0 ? Effect.fail(new NotFoundError({ type: "prompt", id })) : Effect.void
-          )
+  const deletePrompt = (id: string): Effect.Effect<void, NotFoundError | AllDatabaseErrors> =>
+    database.withConnection((conn) =>
+      pipe(
+        conn.run("DELETE FROM prompts WHERE id = ?", [id]),
+        Effect.flatMap(
+          (result: Changes): Effect.Effect<void, NotFoundError> =>
+            result.changes === 0 ? Effect.fail(new NotFoundError({ type: "prompt", id })) : Effect.void
         )
       )
-      .pipe(Effect.catchAll(() => Effect.fail(new NotFoundError({ type: "prompt", id }))))
+    )
 
   return {
     create,
@@ -159,7 +142,7 @@ export const PromptServiceTest = Layer.succeed(
       create: (name: string, content: string): Effect.Effect<Prompt, ValidationError> =>
         Effect.gen(function* () {
           const input = yield* pipe(
-            Schema.decodeUnknown(PromptInputSchema)({ name, content }),
+            Schema.decodeUnknown(CreatePromptRequestSchema)({ name, content }),
             Effect.mapError(
               (error) =>
                 new ValidationError({
@@ -187,7 +170,7 @@ export const PromptServiceTest = Layer.succeed(
       update: (id: string, name: string, content: string): Effect.Effect<Prompt, ValidationError | NotFoundError> =>
         Effect.gen(function* () {
           const input = yield* pipe(
-            Schema.decodeUnknown(PromptInputSchema)({ name, content }),
+            Schema.decodeUnknown(CreatePromptRequestSchema)({ name, content }),
             Effect.mapError(
               (error) =>
                 new ValidationError({

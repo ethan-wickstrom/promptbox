@@ -9,16 +9,22 @@
 <body class="p-4 font-sans">
   <h1 class="text-2xl mb-4">Prompts</h1>
   <form id="add" class="mb-4 space-y-2">
-    <input class="border p-1 w-full" placeholder="Name" id="name" />
-    <textarea class="border p-1 w-full" placeholder="Content" id="content"></textarea>
+    <input class="border p-1 w-full" placeholder="Name" id="name" required />
+    <textarea class="border p-1 w-full" placeholder="Content" id="content" required></textarea>
     <button class="bg-blue-600 text-white px-2 py-1" type="submit">Add</button>
   </form>
   <ul id="list" class="space-y-1"></ul>
   <script type="module">
     const list = document.getElementById('list');
     const form = document.getElementById('add');
+    const nameInput = document.getElementById('name');
+    const contentInput = document.getElementById('content');
 
-    window.viewPrompt = async (id) => {
+    if (!list || !form || !(nameInput instanceof HTMLInputElement) || !(contentInput instanceof HTMLTextAreaElement)) {
+      throw new Error('Required elements not found');
+    }
+
+    async function viewPrompt(id) {
       try {
         const res = await fetch(`/api/prompts/${id}`);
         if (!res.ok) {
@@ -31,23 +37,43 @@
       } catch (error) {
         alert('Failed to load prompt: ' + error.message);
       }
-    };
+    }
 
     async function load() {
       const res = await fetch('/api/prompts');
       const prompts = await res.json();
-      list.innerHTML = prompts
-        .map(
-          p => `<li class="flex justify-between"><span class="text-blue-600 cursor-pointer" onclick="viewPrompt('${p.id}')">${p.name}</span><button data-id="${p.id}" class="text-red-600 delete">Delete</button></li>`,
-        )
-        .join('');
+      list.innerHTML = ''; // Clear existing list
+      for (const p of prompts) {
+        const li = document.createElement('li');
+        li.className = 'flex justify-between';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'text-blue-600 cursor-pointer';
+        nameSpan.textContent = p.name;
+        nameSpan.dataset.id = p.id;
+        nameSpan.dataset.action = 'view';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'text-red-600';
+        deleteButton.textContent = 'Delete';
+        deleteButton.dataset.id = p.id;
+        deleteButton.dataset.action = 'delete';
+
+        li.append(nameSpan, deleteButton);
+        list.append(li);
+      }
     }
 
     list.addEventListener('click', async e => {
       const target = e.target;
-      if (target instanceof HTMLElement && target.classList.contains('delete')) {
-        const id = target.dataset.id;
-        if (!id) return;
+      if (!(target instanceof HTMLElement)) return;
+
+      const { id, action } = target.dataset;
+      if (!id || !action) return;
+
+      if (action === 'view') {
+        await viewPrompt(id);
+      } else if (action === 'delete') {
         try {
           const res = await fetch('/api/prompts/' + id, { method: 'DELETE' });
           if (!res.ok && res.status !== 204) {
@@ -55,7 +81,7 @@
             alert(error.error || 'Failed to delete prompt');
             return;
           }
-          load();
+          await load();
         } catch (error) {
           alert('Failed to delete prompt: ' + error.message);
         }
@@ -64,8 +90,8 @@
 
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      const name = document.getElementById('name').value;
-      const content = document.getElementById('content').value;
+      const name = nameInput.value;
+      const content = contentInput.value;
       try {
         const res = await fetch('/api/prompts', {
           method: 'POST',
@@ -77,9 +103,9 @@
           alert(error.error || 'Failed to create prompt');
           return;
         }
-        document.getElementById('name').value = '';
-        document.getElementById('content').value = '';
-        load();
+        nameInput.value = '';
+        contentInput.value = '';
+        await load();
       } catch (error) {
         alert('Failed to create prompt: ' + error.message);
       }

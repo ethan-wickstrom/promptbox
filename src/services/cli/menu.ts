@@ -57,7 +57,7 @@ export const runMenu = (items: readonly string[]): Effect.Effect<number, IOError
               return Ref.set(stateRef, newState).pipe(Effect.andThen(render(newState)), Effect.andThen(loop))
             })
             .with("return", () => Effect.succeed(state.index))
-            .with("c", () => Effect.die("User interrupted"))
+            .with("c", () => Effect.fail(new Terminal.QuitException()))
             .otherwise(() => loop)
         })
 

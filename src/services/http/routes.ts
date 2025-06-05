@@ -1,9 +1,10 @@
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform"
 import { ArrayFormatter, Schema } from "@effect/schema"
 import { Effect, pipe } from "effect"
+import type { AllDatabaseErrors } from "../../errors.ts"
 import { HttpError } from "../../errors.ts"
-import type { PromptService } from "../prompt.ts"
-import { CreatePromptRequest, UpdatePromptRequest } from "./schemas.ts"
+import { PromptService } from "../prompt.ts"
+import { CreatePromptRequestSchema, UpdatePromptRequestSchema } from "../../schemas.ts"
 
 // Helper to parse JSON body with schema validation
 const parseJsonBody =
@@ -27,16 +28,27 @@ const parseJsonBody =
       )
     )
 
+const handleDbError = (error: AllDatabaseErrors) =>
+  HttpServerResponse.json({ error: "Database error", details: error.reason }, { status: 500 })
+
 // Create API routes
-export const makeApiRoutes = (promptService: PromptService): HttpRouter.HttpRouter<never> =>
+export const makeApiRoutes = (): HttpRouter.HttpRouter<PromptService> =>
   HttpRouter.empty.pipe(
     // GET /prompts
     HttpRouter.get(
       "/prompts",
       Effect.gen(function* () {
+        const promptService = yield* PromptService
         const prompts = yield* promptService.list
         return yield* HttpServerResponse.json(prompts)
-      })
+      }).pipe(
+        Effect.catchTags({
+          DatabaseError: handleDbError,
+          ConnectionError: handleDbError,
+          QueryError: handleDbError,
+          ConstraintError: handleDbError
+        })
+      )
     ),
     // GET /prompts/:id
     HttpRouter.get(
@@ -49,12 +61,17 @@ export const makeApiRoutes = (promptService: PromptService): HttpRouter.HttpRout
           return yield* HttpServerResponse.json({ error: "Invalid prompt ID" }, { status: 400 })
         }
 
+        const promptService = yield* PromptService
         const prompt = yield* promptService.getById(id)
         return yield* HttpServerResponse.json(prompt)
       }).pipe(
         Effect.catchTags({
           NotFoundError: (error) =>
-            HttpServerResponse.json({ error: "Prompt not found", details: { id: error.id } }, { status: 404 })
+            HttpServerResponse.json({ error: "Prompt not found", details: { id: error.id } }, { status: 404 }),
+          DatabaseError: handleDbError,
+          ConnectionError: handleDbError,
+          QueryError: handleDbError,
+          ConstraintError: handleDbError
         })
       )
     ),
@@ -63,14 +80,19 @@ export const makeApiRoutes = (promptService: PromptService): HttpRouter.HttpRout
       "/prompts",
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        const body = yield* parseJsonBody(CreatePromptRequest)(request)
+        const body = yield* parseJsonBody(CreatePromptRequestSchema)(request)
+        const promptService = yield* PromptService
         const prompt = yield* promptService.create(body.name, body.content)
         return yield* HttpServerResponse.json(prompt, { status: 201 })
       }).pipe(
         Effect.catchTags({
           HttpError: (error) => HttpServerResponse.json({ error: error.reason }, { status: error.statusCode }),
           ValidationError: (error) =>
-            HttpServerResponse.json({ error: "Validation failed", details: error.reason }, { status: 400 })
+            HttpServerResponse.json({ error: "Validation failed", details: error.reason }, { status: 400 }),
+          DatabaseError: handleDbError,
+          ConnectionError: handleDbError,
+          QueryError: handleDbError,
+          ConstraintError: handleDbError
         })
       )
     ),
@@ -86,7 +108,8 @@ export const makeApiRoutes = (promptService: PromptService): HttpRouter.HttpRout
         }
 
         const request = yield* HttpServerRequest.HttpServerRequest
-        const body = yield* parseJsonBody(UpdatePromptRequest)(request)
+        const body = yield* parseJsonBody(UpdatePromptRequestSchema)(request)
+        const promptService = yield* PromptService
         const prompt = yield* promptService.update(id, body.name, body.content)
         return yield* HttpServerResponse.json(prompt)
       }).pipe(
@@ -95,7 +118,11 @@ export const makeApiRoutes = (promptService: PromptService): HttpRouter.HttpRout
           ValidationError: (error) =>
             HttpServerResponse.json({ error: "Validation failed", details: error.reason }, { status: 400 }),
           NotFoundError: (error) =>
-            HttpServerResponse.json({ error: "Prompt not found", details: { id: error.id } }, { status: 404 })
+            HttpServerResponse.json({ error: "Prompt not found", details: { id: error.id } }, { status: 404 }),
+          DatabaseError: handleDbError,
+          ConnectionError: handleDbError,
+          QueryError: handleDbError,
+          ConstraintError: handleDbError
         })
       )
     ),
@@ -110,12 +137,17 @@ export const makeApiRoutes = (promptService: PromptService): HttpRouter.HttpRout
           return yield* HttpServerResponse.json({ error: "Invalid prompt ID" }, { status: 400 })
         }
 
+        const promptService = yield* PromptService
         yield* promptService.delete(id)
         return yield* HttpServerResponse.empty({ status: 204 })
       }).pipe(
         Effect.catchTags({
           NotFoundError: (error) =>
-            HttpServerResponse.json({ error: "Prompt not found", details: { id: error.id } }, { status: 404 })
+            HttpServerResponse.json({ error: "Prompt not found", details: { id: error.id } }, { status: 404 }),
+          DatabaseError: handleDbError,
+          ConnectionError: handleDbError,
+          QueryError: handleDbError,
+          ConstraintError: handleDbError
         })
       )
     )
