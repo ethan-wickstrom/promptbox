@@ -5,7 +5,8 @@ import { IOError } from "../../errors.ts"
 export const ask = (question: string): Effect.Effect<string, IOError, Terminal.Terminal> =>
   Effect.gen(function* () {
     const terminal = yield* Terminal.Terminal
-    return yield* terminal.readLine(question)
+    yield* terminal.display(question)
+    return yield* terminal.readLine
   }).pipe(
     Effect.mapError(
       (error) =>

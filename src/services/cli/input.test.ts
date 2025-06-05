@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { TestTerminal } from "@effect/platform/test"
+import { Terminal } from "@effect/platform"
 import { Effect, Exit } from "effect"
 import type { IOError } from "../../errors.ts"
+import { TestTerminal } from "../../test/test-terminal.ts"
 import { ask } from "./input.ts"
 
 describe("ask", () => {
@@ -22,14 +23,13 @@ describe("ask", () => {
 
   test("should fail with IOError when readline emits an error", async (): Promise<void> => {
     const questionText = "What is your quest?"
-    const errorMessage = "test error"
 
     const program = ask(questionText)
     const result = await Effect.runPromiseExit(
       program.pipe(
         Effect.provide(
           TestTerminal.layer({
-            readLine: Effect.fail(new Error(errorMessage))
+            readLineEffect: Effect.fail(new Terminal.QuitException())
           })
         )
       )
@@ -43,7 +43,7 @@ describe("ask", () => {
         const error = cause.error as IOError
         expect(error._tag).toBe("IOError")
         expect(error.operation).toBe("readline")
-        expect(error.reason).toBe(`Failed to read input: Error: ${errorMessage}`)
+        expect(error.reason).toBe("Failed to read input: QuitException")
       }
     }
   })

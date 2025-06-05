@@ -1,4 +1,4 @@
-import { KeyInput, Terminal } from "@effect/platform"
+import { Terminal } from "@effect/platform"
 import { Effect, Ref } from "effect"
 import { match } from "ts-pattern"
 import { IOError } from "../../errors.ts"
@@ -16,11 +16,11 @@ const render = (state: MenuState): Effect.Effect<void, never, Terminal.Terminal>
     yield* terminal.display("\u001B[?25l") // hide cursor
     yield* terminal.display("\u001B[2J\u001B[H") // clear screen
     for (let i = 0; i < state.items.length; i++) {
-      const item = state.items[i]!
+      const item = state.items[i]
       const prefix = i === state.index ? "> " : "  "
       yield* terminal.display(`${prefix}${item}\n`)
     }
-  })
+  }).pipe(Effect.catchAllCause(Effect.logError))
 
 // Move the cursor up or down
 const moveCursor = (delta: number, state: MenuState): MenuState => {
@@ -30,11 +30,8 @@ const moveCursor = (delta: number, state: MenuState): MenuState => {
 }
 
 // Run the menu and return the selected index
-export const runMenu = (
-  items: readonly string[]
-): Effect.Effect<number, IOError, Terminal.Terminal | KeyInput.KeyInput> =>
+export const runMenu = (items: readonly string[]): Effect.Effect<number, IOError, Terminal.Terminal> =>
   Effect.gen(function* () {
-    const keyInput = yield* KeyInput.KeyInput
     const terminal = yield* Terminal.Terminal
 
     // Initialize state
@@ -42,29 +39,27 @@ export const runMenu = (
 
     const selectedIndex = yield* Effect.scoped(
       Effect.gen(function* () {
-        // Set raw mode
-        yield* terminal.setRaw(true)
-
         // Initial render
         const initialState = yield* Ref.get(stateRef)
         yield* render(initialState)
 
-        const loop: Effect.Effect<number, never, never> = Effect.gen(function* () {
-          const key = yield* keyInput.read()
+        const loop: Effect.Effect<number, Terminal.QuitException, Terminal.Terminal> = Effect.gen(function* () {
+          const input = yield* terminal.readInput
+          const key = input.key
           const state = yield* Ref.get(stateRef)
-          return yield* match(key)
-            .with({ key: "up" }, () => {
+          return yield* match(key.name)
+            .with("up", () => {
               const newState = moveCursor(-1, state)
               return Ref.set(stateRef, newState).pipe(Effect.andThen(render(newState)), Effect.andThen(loop))
             })
-            .with({ key: "down" }, () => {
+            .with("down", () => {
               const newState = moveCursor(1, state)
               return Ref.set(stateRef, newState).pipe(Effect.andThen(render(newState)), Effect.andThen(loop))
             })
-            .with({ key: "return" }, () => Effect.succeed(state.index))
-            .with({ key: "c", ctrl: true }, () => Effect.die("User interrupted"))
+            .with("return", () => Effect.succeed(state.index))
+            .with("c", () => Effect.die("User interrupted"))
             .otherwise(() => loop)
-        }).pipe(Effect.flatten)
+        })
 
         return yield* loop
       })
